@@ -84,6 +84,54 @@ def inspect(
         )
 
 
+def inspect_sample(
+    index: int,
+    snapshot_timesteps: list[float],
+    positions: np.ndarray,
+    velocities: np.ndarray,
+    images: np.ndarray,
+    **kwargs,
+) -> None:
+    """
+    Thin wrapper around `inspect` used when the data stored in `positions`,
+    `velocities`, and `images` consists of several samples (by contrast, the method
+    `inspect` handles a single sample at a time).
+
+    Arguments
+    snapshot_timesteps          List of the times at which the image snapshots
+                                are recorded. Provided so that these times
+                                can be used as legend for the plots.
+    positions                   `numpy` array of shape
+                                `(n_samples, n_snapshot_timesteps, 2)`
+                                where `positions[i, j]` is the position,
+                                in the two-dimensional plane, of the ball
+                                at time `snapshot_timesteps[j]`
+                                corresponding to the `i`-th sample.
+    velocities                  `numpy` array of shape `(n_samples, 2)`
+                                where `velocities[i]` corresponds to
+                                the initial velocity of the ball in the `i`-th sample.
+    images                      `numpy` array of shape
+                                `(n_samples, n_snapshot_timesteps, width, height, 1)`
+                                where `images[i, j]` is the image recorded at time
+                                `snapshot_timesteps[j]` for the `i`-th sample.
+
+                                The last dimension of the `images` array corresponds to
+                                the fact that these images are grayscale, and
+                                so is encoded in a single grayscale channel.
+
+                                The `images` array has `images.dtype == np.uint8`,
+                                i.e. its entries are unsigned 8-bit integers.
+                                In other words, the entries of `images` are integers
+                                between 0 and 255 (0 and 255 included).
+                                This data type is chosen to minimize the space
+                                that the `images` array takes on disk when saved or
+                                loaded.
+    """
+    inspect(
+        snapshot_timesteps, positions[index], velocities[index], images[index], **kwargs
+    )
+
+
 def create_animation(images: np.ndarray, display_walls: bool = False) -> FuncAnimation:
     """
     Given a training data sample, create a `matplotlib.animation.FuncAnimation` object
