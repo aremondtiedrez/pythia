@@ -74,11 +74,14 @@ def inspect(
     plt.show()
 
     # Initial velocity
-    print(f"Initial velocity:        {velocity}")
+    print(f"Initial velocity:    {np.array2string(velocity, precision=2)}")
 
     # Positions
     for snapshot_index, snapshot_time in enumerate(snapshot_timesteps):
-        print(f"Position at t = {snapshot_time:.1f}: {positions[snapshot_index]}")
+        print(
+            f"Position at t = {snapshot_time:.1f}: "
+            f"{np.array2string(positions[snapshot_index], precision=2)}"
+        )
 
 
 def create_animation(images: np.ndarray, display_walls: bool = False) -> FuncAnimation:
