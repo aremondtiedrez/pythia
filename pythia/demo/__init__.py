@@ -5,7 +5,7 @@ from importlib import resources
 import numpy as np
 
 
-def load_demo_data() -> tuple:
+def load_data() -> tuple:
     """
     Load the demonstration data, returning a tuple
     `(snapshot_timesteps, positions, velocities, images)`.
