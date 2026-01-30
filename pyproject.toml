@@ -20,3 +20,8 @@ dev = [
 
 [tool.setuptools.packages.find]
 include = ["pythia*"]
+
+[tool.setuptools.package-data]
+pythia = [
+    "demo/*.npy",
+]

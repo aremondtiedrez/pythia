@@ -5,6 +5,7 @@ given initial video frames, what will a video frame in the future look like?
 
 __version__ = "0.1.0"
 
+from . import demo
 from . import visualization
 
 __all__ = ["visualization"]
