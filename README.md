@@ -5,7 +5,7 @@ PyThia performs video prediction for simple physical systems: given initial vide
 
 The easiest way to see what PyThia can do is to peruse the demonstration notebook.
 It is available as an [interactive notebook](
-    https://colab.research.google.com/github/aremondtiedrez/hopus/blob/main/demo.ipynb
+    https://colab.research.google.com/github/aremondtiedrez/pythia/blob/main/demo.ipynb
 ) served via Google Colab.
 
 ## Why the name `PyThia`?
