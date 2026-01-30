@@ -190,7 +190,7 @@ def generate(  # pylint:disable=too-many-arguments, too-many-locals
                 and timestep >= snapshot_timesteps[snapshot_index]
             ):
                 # Record the position
-                positions[sample_index] = np.array(ball_body.position)
+                positions[sample_index, snapshot_index] = np.array(ball_body.position)
 
                 # Reset the visual representation
                 for patch in axes.patches:
