@@ -57,7 +57,7 @@ def inspect(
     displayed_images = images.copy()
     if display_walls:
         for snapshot_index in range(n_snapshot_timesteps):
-            displayed_images[snapshot_index] = add_walls(
+            displayed_images[snapshot_index] = _add_walls(
                 displayed_images[snapshot_index]
             )
 
@@ -111,7 +111,7 @@ def create_animation(images: np.ndarray, display_walls: bool = False) -> FuncAni
     frames = [images[snapshot_index] for snapshot_index in range(n_snapshot_timesteps)]
 
     if display_walls:
-        frames = [add_walls(frame) for frame in frames]
+        frames = [_add_walls(frame) for frame in frames]
 
     figure, axes = plt.subplots(figsize=(4, 4))
     frame = axes.imshow(frames[0], cmap="gray")
@@ -134,7 +134,7 @@ def create_animation(images: np.ndarray, display_walls: bool = False) -> FuncAni
     return animation
 
 
-def add_walls(input_image: np.ndarray, wall_location=4) -> np.ndarray:
+def _add_walls(input_image: np.ndarray, wall_location=4) -> np.ndarray:
     """
     This function adds walls back to the visualization of a training image.
 
