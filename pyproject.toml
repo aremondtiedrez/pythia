@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=45", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pythia"
+version = "0.1.0"
+description = "Video prediction for simple physical systems."
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = [
+    "numpy",
+]
+
+[project.optional-dependencies]
+dev = [
+    "black",
+    "pylint",
+]
+
+[tool.setuptools.packages.find]
+include = ["pythia*"]
