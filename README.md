@@ -1,7 +1,7 @@
 # PyThia
-PyThia performs video prediction: given initial video frames, what will a video frame in the future look like?
+PyThia performs video prediction for simple physical systems: given initial video frames, what will a video frame in the future look like?
 
-## Why `PyThia`?
+## Why the name `PyThia`?
 The objective of this project is to predict what will happen in the future,
 more specifically predicting what will happen in the future of a video
 whose initial frames are given as input.
