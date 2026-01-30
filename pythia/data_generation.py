@@ -125,14 +125,16 @@ def generate(  # pylint:disable=too-many-arguments, too-many-locals
                                 loaded.
     """
     # Initialize the physical simulation and its visual representation
-    space = initialize_simulation_space(physical_width, physical_height, wall_thickness)
-    figure, axes = initialize_visual_representation(
+    space = _initialize_simulation_space(
+        physical_width, physical_height, wall_thickness
+    )
+    figure, axes = _initialize_visual_representation(
         physical_width, physical_height, image_width, image_height
     )
 
     # Initialize the ball
     default_position = (physical_width / 2, physical_height / 2)
-    ball_body, ball_visual_representation, space, axes = initialize_ball(
+    ball_body, ball_visual_representation, space, axes = _initialize_ball(
         space, axes, default_position, ball_radius
     )
 
@@ -166,8 +168,8 @@ def generate(  # pylint:disable=too-many-arguments, too-many-locals
 
         # Initialize the ball
         min_distance = ball_radius + wall_thickness
-        position = generate_position(physical_width, physical_height, min_distance)
-        velocity = generate_velocity(min_speed, max_speed)
+        position = _generate_position(physical_width, physical_height, min_distance)
+        velocity = _generate_velocity(min_speed, max_speed)
 
         ball_body.position = position
         ball_body.velocity = velocity
@@ -196,7 +198,7 @@ def generate(  # pylint:disable=too-many-arguments, too-many-locals
 
                 # Save the rendering in `images`
                 images[sample_index, snapshot_index, :, :, 0] = (
-                    save_visual_representation_to_array(
+                    _save_visual_representation_to_array(
                         figure, compressed_image_width, compressed_image_height
                     )
                 )
@@ -209,7 +211,7 @@ def generate(  # pylint:disable=too-many-arguments, too-many-locals
     return snapshot_timesteps, positions, velocities, images
 
 
-def initialize_simulation_space(
+def _initialize_simulation_space(
     width: float, height: float, wall_thickness: float
 ) -> pymunk.space.Space:
     """
@@ -245,7 +247,7 @@ def initialize_simulation_space(
     return space
 
 
-def initialize_visual_representation(
+def _initialize_visual_representation(
     physical_width: float, physical_height: float, image_width: int, image_height: int
 ) -> tuple:
     """
@@ -284,7 +286,7 @@ def initialize_visual_representation(
     return figure, axes
 
 
-def initialize_ball(  # pylint:disable=too-many-arguments
+def _initialize_ball(  # pylint:disable=too-many-arguments
     space: pymunk.space.Space,
     axes: "matplotlib.axes._axes.Axes",
     position: tuple[float, float],
@@ -342,7 +344,7 @@ def initialize_ball(  # pylint:disable=too-many-arguments
     return body, visual_representation, space, axes
 
 
-def generate_position(
+def _generate_position(
     width: float, height: float, min_distance: float
 ) -> tuple[float, float]:
     """
@@ -374,7 +376,7 @@ def generate_position(
     return position
 
 
-def generate_velocity(min_speed: float, max_speed: float) -> tuple[float, float]:
+def _generate_velocity(min_speed: float, max_speed: float) -> tuple[float, float]:
     """
     Returns a velocity constructed by choosing its magnitude uniformly at random
     in the interval `[min_speed, max_speed]` and by choosing its angle uniformly
@@ -393,7 +395,7 @@ def generate_velocity(min_speed: float, max_speed: float) -> tuple[float, float]
     return velocity
 
 
-def save_visual_representation_to_array(
+def _save_visual_representation_to_array(
     figure: "matplotlib.figure.Figure",
     width: int,
     height: int,
