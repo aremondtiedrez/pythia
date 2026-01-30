@@ -1,6 +1,5 @@
 """This module contains routines used in the demo notebook."""
 
-
 from importlib import resources
 
 import numpy as np
@@ -46,7 +45,7 @@ def load_demo_data() -> tuple:
         """Load the `numpy` array located at `pythia/demo/filename`."""
         path = resource.files("pythia").joinpath("demo/" + filename)
         return np.load(path)
-    
+
     snapshot_times = np.load("demo_snapshot_timesteps.npy")
     positions = np.load("demo_positions.npy")
     velocities = np.load("demo_velocities.npy")
