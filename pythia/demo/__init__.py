@@ -18,8 +18,9 @@ def load_demo_data() -> tuple:
                             the plots.
     positions               `numpy` array of shape
                             `(n_samples, n_snapshot_timesteps, 2)`
-                            where `positions[i, j]` is the position, in the two-dimensional
-                            plane, of the ball at time `snapshot_timesteps[j]`
+                            where `positions[i, j]` is the position,
+                            in the two-dimensional plane, of the ball
+                            at time `snapshot_timesteps[j]`
                             corresponding to the `i`-th sample.
     velocities              `numpy` array of shape `(n_samples, 2)`
                             where `velocities[i]` corresponds to the initial velocity
@@ -43,12 +44,12 @@ def load_demo_data() -> tuple:
 
     def load(filename):
         """Load the `numpy` array located at `pythia/demo/filename`."""
-        path = resource.files("pythia").joinpath("demo/" + filename)
+        path = resources.files("pythia").joinpath("demo/" + filename)
         return np.load(path)
 
-    snapshot_times = np.load("demo_snapshot_timesteps.npy")
-    positions = np.load("demo_positions.npy")
-    velocities = np.load("demo_velocities.npy")
-    images = np.load("demo_images.npy")
+    snapshot_timesteps = load("demo_snapshot_timesteps.npy")
+    positions = load("demo_positions.npy")
+    velocities = load("demo_velocities.npy")
+    images = load("demo_images.npy")
 
     return snapshot_timesteps, positions, velocities, images
