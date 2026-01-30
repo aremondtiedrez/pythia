@@ -21,6 +21,7 @@ from PIL import Image
 
 def generate(  # pylint:disable=too-many-arguments, too-many-locals
     n_samples: int,
+    monitor_progress: bool = False,
     monitoring_batch_size: int = 1_000,
     physical_width: float = 256.0,
     physical_height: float = 256.0,
@@ -53,11 +54,13 @@ def generate(  # pylint:disable=too-many-arguments, too-many-locals
 
     Arguments
     n_samples                   The number of independent samples to generate.
-    monitoring_batch_size       Generating samples can be a time-consuming process.
-                                This argument is used to control how often a progress
-                                message is printed out informing the user how many
-                                samples have been generated so far and how long that
-                                took. This message will be printed
+    monitor_progress            Generating samples can be a time-consuming process.
+                                This argument is used to control whether or not
+                                a progress message is printed out informing the user
+                                of how many samples have been generated so far and
+                                how long that took.
+    monitoring_batch_size       This argument controls how often the progress message
+                                is printed. It will be printed
                                 every `monitoring_batch_size`-many samples.
     physical_width              The width of the area within which
                                 the physical simulation takes place.
@@ -159,7 +162,7 @@ def generate(  # pylint:disable=too-many-arguments, too-many-locals
     for sample_index in range(n_samples):
 
         # Monitor progress
-        if sample_index % monitoring_batch_size == 0:
+        if monitor_progress and (sample_index % monitoring_batch_size == 0):
             elapsed_time_in_minutes = (time.time() - start_time) / 60
             print(
                 f"Progress: {sample_index}/{n_samples}, "
