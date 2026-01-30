@@ -14,7 +14,7 @@ def inspect(
     positions: np.ndarray,
     velocity: np.ndarray,
     images: np.ndarray,
-    are_walls_added: bool = False,
+    display_walls: bool = False,
 ) -> None:
     """
     Given a training data sample, display a row of plots of the image sequence, with
@@ -43,10 +43,11 @@ def inspect(
                             The last dimension of the `images` array corresponds to
                             the fact that these images are grayscale, and so is encoded
                             in a single grayscale channel.
-    are_walls_added         By default, the raw image is displayed, which does
+    display_walls           By default, the raw image is displayed, which does
                             not include the walls delimiting the space in which
                             the physical simulation takes place. This boolean argument
-                            can be used to add the walls to the image.
+                            can be used to display the walls as part of
+                            the visualization.
     """
 
     n_snapshot_timesteps = len(snapshot_timesteps)
@@ -54,7 +55,7 @@ def inspect(
 
     # If desired, add walls to the images
     displayed_images = images.copy()
-    if are_walls_added:
+    if display_walls:
         for snapshot_index in range(n_snapshot_timesteps):
             displayed_images[snapshot_index] = add_walls(
                 displayed_images[snapshot_index]
@@ -80,9 +81,7 @@ def inspect(
         print(f"Position at t = {snapshot_time:.1f}: {positions[snapshot_index]}")
 
 
-def create_animation(
-    images: np.ndarray, are_walls_added: bool = False
-) -> FuncAnimation:
+def create_animation(images: np.ndarray, display_walls: bool = False) -> FuncAnimation:
     """
     Given a training data sample, create a `matplotlib.animation.FuncAnimation` object
     which is able to be rendered within a notebook or saved as a GIF.
@@ -96,10 +95,11 @@ def create_animation(
                             The last dimension of the `images` array corresponds to
                             the fact that these images are grayscale, and so is encoded
                             in a single grayscale channel.
-    are_walls_added         By default, the raw image is displayed, which does
+    display_walls           By default, the raw image is displayed, which does
                             not include the walls delimiting the space in which
                             the physical simulation takes place. This boolean argument
-                            can be used to add the walls to the image.
+                            can be used to display the walls as part of
+                            the visualization.
 
     Returns
     animation               A `matplotlib.animation.FuncAnimation` object
@@ -110,7 +110,7 @@ def create_animation(
 
     frames = [images[snapshot_index] for snapshot_index in range(n_snapshot_timesteps)]
 
-    if are_walls_added:
+    if display_walls:
         frames = [add_walls(frame) for frame in frames]
 
     figure, axes = plt.subplots(figsize=(4, 4))
