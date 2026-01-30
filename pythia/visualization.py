@@ -6,6 +6,8 @@ and compare visually the training data to the predictions made.
 import matplotlib.pyplot as plt
 import numpy as np
 
+from matplotlib.animation import FuncAnimation
+
 
 def inspect(
     snapshot_timesteps: list[float],
@@ -64,3 +66,48 @@ def inspect(
     # Positions
     for snapshot_index, snapshot_time in enumerate(snapshot_timesteps):
         print(f"Position at t = {snapshot_time:.1f}: {positions[snapshot_index]}")
+
+
+def create_animation(images: np.ndarray) -> FuncAnimation:
+    """
+    Given a training data sample, create a `matplotlib.animation.FuncAnimation` object
+    which is able to be rendered within a notebook or saved as a GIF.
+
+    Arguments
+    images                  `numpy` array of shape
+                            `(n_snapshot_timesteps, width, height, 1)`
+                            where `images[i]` is the image recorded at time
+                            `snapshot_timesteps[i]`.
+
+                            The last dimension of the `images` array corresponds to
+                            the fact that these images are grayscale, and so is encoded
+                            in a single grayscale channel.
+
+    Returns
+    animation               A `matplotlib.animation.FuncAnimation` object
+                            which can be used to render the corresponding
+                            animation/video within a notebook or save it as a GIF file.
+    """
+    n_snapshot_timesteps, width, height, _ = images.shape
+
+    frames = [images[snapshot_index] for snapshot_index in range(n_snapshot_timesteps)]
+
+    figure, axes = plt.subplots(figsize=(4, 4))
+    frame = axes.imshow(frames[0], cmap="gray")
+    axes.set(xlim=(0, width), ylim=(height, 0))
+    axes.axis("off")
+
+    def update(frame_index):
+        frame.set_array(frames[frame_index])
+        return [frame]
+
+    animation = FuncAnimation(
+        figure,
+        update,
+        frames=n_snapshot_timesteps,
+        interval=500,
+        blit=True,
+        repeat=True,
+    )
+    plt.close()
+    return animation

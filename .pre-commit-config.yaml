@@ -7,3 +7,4 @@ repos:
     rev: v3.0.3
     hooks:
       - id: pylint
+        additional_dependencies: [matplotlib, numpy]
