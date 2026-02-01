@@ -55,9 +55,9 @@ def load_data(kind: str = "demo") -> tuple:
         path = resources.files("pythia").joinpath("demo/data/" + filename)
         return np.load(path)
 
-    snapshot_timesteps = load(kind + "snapshot_timesteps.npy")
-    positions = load(kind + "positions.npy")
-    velocities = load(kind + "velocities.npy")
-    images = load(kind + "images.npy")
+    snapshot_timesteps = load(kind + "_snapshot_timesteps.npy")
+    positions = load(kind + "_positions.npy")
+    velocities = load(kind + "_velocities.npy")
+    images = load(kind + "_images.npy")
 
     return snapshot_timesteps, positions, velocities, images
