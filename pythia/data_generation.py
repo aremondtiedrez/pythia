@@ -228,6 +228,10 @@ def generate(  # pylint:disable=too-many-arguments, too-many-locals
 
     plt.close()
 
+    if monitor_progress:
+        elapsed_time_in_minutes = (time.time() - start_time) / 60
+        print(f"Completed in {elapsed_time_in_minutes:.1f} minutes.")
+
     return snapshot_timesteps, positions, velocities, images
 
 
