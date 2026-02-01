@@ -7,6 +7,7 @@ __version__ = "0.1.0"
 
 from . import demo
 from . import data_generation
+from . import models
 from . import visualization
 
-__all__ = ["data_generation", "visualization"]
+__all__ = ["data_generation", "demo", "models", "visualization"]
