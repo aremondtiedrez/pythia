@@ -5,12 +5,20 @@ from importlib import resources
 import numpy as np
 
 
-def load_data() -> tuple:
+def load_data(kind: str = "demo") -> tuple:
     """
     Load the demonstration data, returning a tuple
     `(snapshot_timesteps, positions, velocities, images)`.
 
     Below we will use `n_samples` to denote the number of samples loaded in this manner.
+
+    Argument
+    kind                    Which data to load.
+                            `demo` (default)    A small number of samples, issued from
+                                                the test data, for quick loading.
+                            `collisionless`     Collisionless training samples.
+                            `training`          Training samples.
+                            `test`              Testing samples.
 
     Returns
     snapshot_timesteps      List of the times at which the image snapshots are recorded.
@@ -47,9 +55,9 @@ def load_data() -> tuple:
         path = resources.files("pythia").joinpath("demo/data/" + filename)
         return np.load(path)
 
-    snapshot_timesteps = load("demo_snapshot_timesteps.npy")
-    positions = load("demo_positions.npy")
-    velocities = load("demo_velocities.npy")
-    images = load("demo_images.npy")
+    snapshot_timesteps = load(kind + "snapshot_timesteps.npy")
+    positions = load(kind + "positions.npy")
+    velocities = load(kind + "velocities.npy")
+    images = load(kind + "images.npy")
 
     return snapshot_timesteps, positions, velocities, images
