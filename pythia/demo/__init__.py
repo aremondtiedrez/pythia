@@ -43,8 +43,8 @@ def load_data() -> tuple:
     """
 
     def load(filename):
-        """Load the `numpy` array located at `pythia/demo/filename`."""
-        path = resources.files("pythia").joinpath("demo/" + filename)
+        """Load the `numpy` array located at `pythia/demo/data/filename`."""
+        path = resources.files("pythia").joinpath("demo/data/" + filename)
         return np.load(path)
 
     snapshot_timesteps = load("demo_snapshot_timesteps.npy")
