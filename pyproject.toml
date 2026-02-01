@@ -9,6 +9,7 @@ description = "Video prediction for simple physical systems."
 readme = "README.md"
 requires-python = ">=3.8"
 dependencies = [
+    "keras",
     "numpy",
     "pymunk"
 ]
