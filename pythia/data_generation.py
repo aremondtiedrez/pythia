@@ -21,6 +21,7 @@ from PIL import Image
 
 def generate(  # pylint:disable=too-many-arguments, too-many-locals
     n_samples: int,
+    ensure_no_collisions: bool = False,
     monitor_progress: bool = False,
     monitoring_batch_size: int = 1_000,
     physical_width: float = 256.0,
@@ -54,6 +55,9 @@ def generate(  # pylint:disable=too-many-arguments, too-many-locals
 
     Arguments
     n_samples                   The number of independent samples to generate.
+    ensure_no_collisions        Boolean. Determines whether or not the trajectories
+                                generate should be forced to avoid collisions between
+                                the ball and the walls.
     monitor_progress            Generating samples can be a time-consuming process.
                                 This argument is used to control whether or not
                                 a progress message is printed out informing the user
@@ -172,9 +176,22 @@ def generate(  # pylint:disable=too-many-arguments, too-many-locals
         # Initialize the ball
         min_distance = ball_radius + wall_thickness
         position = _generate_position(physical_width, physical_height, min_distance)
-        velocity = _generate_velocity(min_speed, max_speed)
-
         ball_body.position = position
+
+        # If we seek to only generate trajectories that avoid collisions,
+        # we keep the position generated above but randomly generated independent
+        # velocities until a valid velocity is obtained.
+        while True:
+            velocity = _generate_velocity(min_speed, max_speed)
+            if not ensure_no_collisions or _trajectory_contains_no_collisions(
+                position,
+                velocity,
+                snapshot_timesteps[-1],
+                physical_width,
+                physical_height,
+                min_distance,
+            ):
+                break
         ball_body.velocity = velocity
 
         # Record the initial velocity
@@ -439,3 +456,40 @@ def _save_visual_representation_to_array(
     # Resize the grayscale image
     image = np.array(Image.fromarray(image).resize((width, height)))
     return image
+
+
+def _trajectory_contains_no_collisions(  # pylint: disable=too-many-arguments
+    position: tuple[float, float],
+    velocity: tuple[float, float],
+    time_horizon: float,
+    width: float,
+    height: float,
+    min_distance: float,
+) -> bool:
+    """
+    Determines whether or not a trajectory starting at position `position`
+    with initial velocity `velocity` at time `t = 0` will be within, or past,
+    a distance `min_distance` of the boundary of the rectangle
+        `[0, width] x [0, height]`
+    by the time `t = time_horizon`.
+
+    Arguments
+    position        Initial position of a point particle.
+    velocity        Initial velocity of a point particle.
+    time_horizon    The time horizon on which to check whether or no collisions
+                    occur. I.e. the time interval considered is
+                    `[0, time_horizon]`.
+    width           The width of the area within which the point particle moves.
+    height          The height of the area within which the point particle moves.
+    min_distance    The minimum distance between the trajectory and
+                    the boundaries.
+
+    Returns
+    boolean equal to `True` if no collisions will occur and `False` otherwise.
+    """
+    return (
+        min_distance < position[0] + time_horizon * velocity[0] < width - min_distance
+        and min_distance
+        < position[1] + time_horizon * velocity[1]
+        < height - min_distance
+    )
