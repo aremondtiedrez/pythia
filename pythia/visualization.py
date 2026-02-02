@@ -330,7 +330,7 @@ def _add_walls(input_image: np.ndarray, wall_location=4) -> np.ndarray:
                     the fact that these images are grayscale, and so is encoded
                     in a single grayscale channel.
     """
-    output_image = input_image.copy()
+    output_image = np.array(input_image).copy()
     # Top wall
     output_image[wall_location, wall_location:-wall_location] = 0
     # Bottom wall
