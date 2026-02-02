@@ -165,7 +165,7 @@ def inspect_memoryless_prediction(
                             and predicts the image in the immediate future.
     """
 
-    width, height = img0.shape
+    width, height, _ = img0.shape
 
     prediction = memoryless_model.predict_next_image([img0], [img1])[0]
 
