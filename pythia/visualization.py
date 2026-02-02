@@ -132,6 +132,66 @@ def inspect_sample(
     )
 
 
+def inspect_memoryless_prediction(
+    snapshot_timesteps: list[float],
+    img0: np.ndarray,
+    img1: np.ndarray,
+    img2: np.ndarray,
+    memoryless_model: "pythia.models.Memoryless",
+) -> None:
+    """
+    Given a training sample for the memoryless model and a trained instance
+    of the memoryless model, inspect visually the performance of that model
+    on prediction.
+
+    Arguments
+    snapshot_timesteps      List of the times at which the image snapshots are recorded.
+                            Provided so that these times can be used as legend for
+                            the plots.
+    img0                    Image from the immediate past, captured at, say, `t = 0`.
+                            Provided as a `numpy` array of shape
+                            `(width, height, 1)`, where the last dimension being `1`
+                            indicates that this image is grayscale.
+    img1                    Image from the immediate past, captured at, say, `t = 1`.
+                            Provided as a `numpy` array of shape
+                            `(width, height, 1)`, where the last dimension being `1`
+                            indicates that this image is grayscale.
+    img2                    Image in the immediate future, captured at, say, `t = 2`.
+                            Provided as a `numpy` array of shape
+                            `(width, height, 1)`, where the last dimension being `1`
+                            indicates that this image is grayscale.
+    memoryless_model        Model defined in `models.Memoryless` which takes as input
+                            two images in the immediate past, such as `img0` and `img1`,
+                            and predicts the image in the immediate future.
+    """
+
+    width, height = img0.shape
+
+    prediction = memoryless_model.predict_next_image([img0], [img1])[0]
+
+    images_to_plot = (
+        img0,
+        img1,
+        prediction,
+        img2,
+        img2 - prediction,
+    )
+    plot_titles = (
+        f"Past image at t = {snapshot_timesteps[0]}",
+        f"Past image at t = {snapshot_timesteps[1]}",
+        f"Prediction future image at t = {snapshot_timesteps[2]}",
+        f"True image at t = {snapshot_timesteps[2]}",
+        "Difference between\nthe true and predicted futures",
+    )
+
+    _, axes = plt.subplots(1, 5, figsize=(21, 3))
+    for axis, image, title in zip(axes, images_to_plot, plot_titles):
+        axis.imshow(image, cmap="gray")
+        axis.set(xlim=(0, width), ylim=(height, 0), title=title)
+        axis.axis("off")
+    plt.show()
+
+
 def create_animation(images: np.ndarray, display_walls: bool = False) -> FuncAnimation:
     """
     Given a training data sample, create a `matplotlib.animation.FuncAnimation` object
