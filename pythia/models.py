@@ -681,8 +681,10 @@ class LEMON(Model):  # pylint: disable=abstract-method, too-many-ancestors
         `(batch_size, seq_len, latent_dim)`, representing the mean and log-variance
         of the latent space distributions for each image in the sequence.
         """
-        batch_size = tf.shape(img_sequence)[0]
-        seq_len = tf.shape(img_sequence)[1]
+        # Get dynamic shapes
+        shape = tf.shape(img_sequence)
+        batch_size = shape[0]
+        seq_len = shape[1]
 
         # Flatten sequence for batch encoding
         img_flat = tf.reshape(img_sequence, (-1,) + self.img_shape)
