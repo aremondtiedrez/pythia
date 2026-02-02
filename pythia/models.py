@@ -406,9 +406,9 @@ class Memoryless(Model):  # pylint: disable=abstract-method, too-many-ancestors
         return x2
 
 
-class ScheduledSamplingPredictor(
+class ScheduledSamplingPredictor(  # pylint: disable=abstract-method, too-many-ancestors
     layers.Layer
-):  # pylint: disable=abstract-method, too-many-ancestors
+):
     """
     RNN predictor with scheduled sampling for curriculum learning.
 
@@ -453,11 +453,9 @@ class ScheduledSamplingPredictor(
         batch_size = tf.shape(z_means)[0]
         seq_len = tf.shape(z_means)[1]
 
-        # Initialize LSTM states
         h_state = tf.zeros((batch_size, 12 * self.latent_dim), dtype=tf.float32)
         c_state = tf.zeros((batch_size, 12 * self.latent_dim), dtype=tf.float32)
 
-        # TensorArray to collect predictions
         predictions = tf.TensorArray(
             dtype=tf.float32,
             size=seq_len - 1,
@@ -465,22 +463,26 @@ class ScheduledSamplingPredictor(
             clear_after_read=False,
         )
 
-        # Start with timestep 0 as input
+        # Warm up with timestep 0 → predict timestep 1 (not saved)
         current_input = tf.concat([z_means[:, 0], z_log_vars[:, 0]], axis=-1)
         current_input = tf.expand_dims(current_input, 1)
+        rnn_output, h_state, c_state = self.lstm_cell(
+            current_input, initial_state=[h_state, c_state], training=training
+        )
+        pred = self.output_layer(rnn_output)
 
         def loop_body(t, current_input, h_state, c_state, predictions):
-            # Predict timestep t+1 using input from timestep t-1
+            # Use current_input to predict t+1
             rnn_output, h_state_new, c_state_new = self.lstm_cell(
                 current_input, initial_state=[h_state, c_state], training=training
             )
             pred = self.output_layer(rnn_output)
+            # Save prediction (for timestep t+1, stored at index t-1)
             predictions = predictions.write(t - 1, pred)
 
-            # Ground truth at timestep t
+            # Ground truth at timestep t for scheduled sampling
             ground_truth = tf.concat([z_means[:, t], z_log_vars[:, t]], axis=-1)
 
-            # Scheduled sampling: choose input for next iteration
             if training:
                 use_ground_truth = (
                     tf.random.uniform([], dtype=tf.float32) < self.teacher_forcing_ratio
@@ -497,17 +499,15 @@ class ScheduledSamplingPredictor(
         def loop_cond(t, *_):
             return t < seq_len
 
-        # Execute loop
+        # Start loop at t=1, using pred from timestep 0
         _, _, _, _, predictions = tf.while_loop(
             loop_cond,
             loop_body,
-            [tf.constant(1), current_input, h_state, c_state, predictions],
+            [tf.constant(1), tf.expand_dims(pred, 1), h_state, c_state, predictions],
             parallel_iterations=1,
             maximum_iterations=1000,
         )
 
-        # Stack and transpose:
-        # (seq_len-1, batch, 2*latent_dim) -> (batch, seq_len-1, 2*latent_dim)
         return tf.transpose(predictions.stack(), [1, 0, 2])
 
 
