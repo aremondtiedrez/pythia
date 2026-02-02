@@ -316,7 +316,7 @@ def prediction(  # pylint: disable=missing-function-docstring, too-many-argument
     n_future_steps,
 ):
 
-    n_timesteps = ground_truth_images.shape[0]
+    n_timesteps = ground_truth_images.shape[1]
     if n_timesteps != n_past_steps + n_future_steps:
         raise ValueError(
             "n_past_steps and n_future_steps must add up to "
