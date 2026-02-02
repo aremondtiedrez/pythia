@@ -8,8 +8,6 @@ import numpy as np
 
 from matplotlib.animation import FuncAnimation
 
-from . import models
-
 
 def inspect(
     snapshot_timesteps: list[float],
@@ -306,12 +304,9 @@ def reconstruction(
 
 
 def prediction(  # pylint: disable=missing-function-docstring, too-many-arguments, too-many-locals
-    encoder,
-    predictor,
-    decoder,
-    latent_dim,
     snapshot_timesteps,
     ground_truth_images,
+    predicted_images,
     n_past_steps,
     n_future_steps,
 ):
@@ -322,19 +317,6 @@ def prediction(  # pylint: disable=missing-function-docstring, too-many-argument
             "n_past_steps and n_future_steps must add up to "
             "the number of timesteps in ground_truth_images"
         )
-
-    # Make predictions
-    images_in_past = ground_truth_images[:n_past_steps]
-    predicted_images = np.array(
-        models.predict_future(
-            encoder,
-            predictor,
-            decoder,
-            latent_dim,
-            np.expand_dims(images_in_past, axis=0),
-            n_future_steps,
-        )
-    )[0]
 
     # Create plots
     figure, axes = plt.subplots(3, n_timesteps, figsize=(2 * n_timesteps, 5))
