@@ -287,8 +287,8 @@ def reconstruction(
 
     # The embedding contains both the mean and the logarithmic variance,
     # so we only feed the first half of the embedding, i.e. the mean, to the decoder.
-    embedding, _ = encoder.predict(np.expand_dims(true_image, axis=0), verbose=0)
-    reconstructed_image = decoder.predict(embedding, verbose=0)[0]
+    embedding, _ = encoder(np.expand_dims(true_image, axis=0), verbose=0)
+    reconstructed_image = decoder(embedding, verbose=0)[0]
 
     images_to_plot = (true_image, reconstructed_image, true_image - reconstructed_image)
     if display_walls:
