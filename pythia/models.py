@@ -456,54 +456,57 @@ class ScheduledSamplingPredictor(  # pylint: disable=abstract-method, too-many-a
         h_state = tf.zeros((batch_size, 12 * self.latent_dim), dtype=tf.float32)
         c_state = tf.zeros((batch_size, 12 * self.latent_dim), dtype=tf.float32)
 
+        # Predictor outputs seq_len predictions (for timesteps 1 to t)
         predictions = tf.TensorArray(
             dtype=tf.float32,
-            size=seq_len - 1,
+            size=seq_len,
             dynamic_size=False,
             clear_after_read=False,
         )
 
-        # Warm up with timestep 0 → predict timestep 1 (not saved)
-        current_input = tf.concat([z_means[:, 0], z_log_vars[:, 0]], axis=-1)
-        current_input = tf.expand_dims(current_input, 1)
-        rnn_output, h_state, c_state = self.lstm_cell(
-            current_input, initial_state=[h_state, c_state], training=training
-        )
-        pred = self.output_layer(rnn_output)
-
         def loop_body(t, current_input, h_state, c_state, predictions):
-            # Use current_input to predict t+1
+            # Use current_input (at timestep t) to predict t+1
             rnn_output, h_state_new, c_state_new = self.lstm_cell(
                 current_input, initial_state=[h_state, c_state], training=training
             )
             pred = self.output_layer(rnn_output)
-            # Save prediction (for timestep t+1, stored at index t-1)
-            predictions = predictions.write(t - 1, pred)
+            # Save prediction for timestep t+1 at index t
+            predictions = predictions.write(t, pred)
 
-            # Ground truth at timestep t for scheduled sampling
-            ground_truth = tf.concat([z_means[:, t], z_log_vars[:, t]], axis=-1)
+            # For next iteration: decide between ground truth at t+1 or prediction
+            if t + 1 < seq_len:
+                ground_truth = tf.concat(
+                    [z_means[:, t + 1], z_log_vars[:, t + 1]], axis=-1
+                )
 
-            if training:
-                use_ground_truth = (
-                    tf.random.uniform([], dtype=tf.float32) < self.teacher_forcing_ratio
-                )
-                next_input = tf.cond(
-                    use_ground_truth, lambda: ground_truth, lambda: pred
-                )
+                if training:
+                    use_ground_truth = (
+                        tf.random.uniform([], dtype=tf.float32)
+                        < self.teacher_forcing_ratio
+                    )
+                    next_input = tf.cond(
+                        use_ground_truth, lambda: ground_truth, lambda: pred
+                    )
+                else:
+                    next_input = pred
+
+                next_input = tf.expand_dims(next_input, 1)
             else:
-                next_input = pred
+                next_input = pred  # dummy value for last iteration
 
-            next_input = tf.expand_dims(next_input, 1)
             return [t + 1, next_input, h_state_new, c_state_new, predictions]
 
         def loop_cond(t, *_):
             return t < seq_len
 
-        # Start loop at t=1, using pred from timestep 0
+        # Start at t=0 with ground truth from timestep 0
+        initial_input = tf.concat([z_means[:, 0], z_log_vars[:, 0]], axis=-1)
+        initial_input = tf.expand_dims(initial_input, 1)
+
         _, _, _, _, predictions = tf.while_loop(
             loop_cond,
             loop_body,
-            [tf.constant(1), tf.expand_dims(pred, 1), h_state, c_state, predictions],
+            [tf.constant(0), initial_input, h_state, c_state, predictions],
             parallel_iterations=1,
             maximum_iterations=1000,
         )
@@ -537,11 +540,12 @@ class LEMON(Model):  # pylint: disable=abstract-method, too-many-ancestors
     1. Reconstruction loss: How well the encoder-decoder pair can reconstruct
        the input images (for timesteps 0 to t-1).
     2. Prediction loss: How well the full model (encoder, predictor, decoder)
-       can predict future images (for timesteps 2 to t).
+       can predict future images (for timesteps 2 to t). Note that predictions
+       for timestep 1 are discarded.
     3. KL divergence (pre-prediction): Regularization term for the encoded latent
        distributions, encouraging them to be close to a standard normal distribution.
     4. KL divergence (post-prediction): Regularization term for the predicted latent
-       distributions, similarly encouraging normality.
+       distributions (for timesteps 2 to t), similarly encouraging normality.
 
     These loss components together ensure that the latent space is well-structured
     and that the model learns meaningful features for both reconstruction and
@@ -737,24 +741,24 @@ class LEMON(Model):  # pylint: disable=abstract-method, too-many-ancestors
         1. Encode images at timesteps 0 to t-1 into latent space embeddings
            (mean and log-variance).
         2. Pass the encoded sequence through the predictor to obtain predicted
-           latent embeddings for timesteps 2 to t (note the offset: we use inputs
-           from 0 to t-1 to predict outputs from 2 to t, giving us one-step-ahead
-           predictions after the first timestep).
+           latent embeddings for timesteps 1 to t.
         3. Sample from both the encoded and predicted latent distributions using
            the reparametrization trick.
         4. Decode both sets of samples to obtain reconstructed images (for timesteps
-           0 to t-1) and predicted images (for timesteps 2 to t).
+           0 to t-1) and predicted images (for timesteps 1 to t).
 
         During training, this method also computes and adds four loss components:
-        reconstruction loss, prediction loss, and two KL divergence regularization
-        terms (see `_add_losses` for details).
+        reconstruction loss, prediction loss (using only predictions for timesteps
+        2 to t), and two KL divergence regularization terms (see `_add_losses`
+        for details).
 
         Arguments
         inputs      Image sequence with shape
                     `(batch_size, seq_len, width, height, channels)`.
 
                     The model uses timesteps 0 to t-1 as inputs for reconstruction and
-                    prediction, and timesteps 2 to t as targets for prediction.
+                    prediction. Predictions for timesteps 1 to t are generated, but
+                    only predictions for timesteps 2 to t are used in the loss.
         training    Boolean indicating to built-in `keras` methods whether or not
                     the model is currently in training mode.
 
@@ -774,7 +778,7 @@ class LEMON(Model):  # pylint: disable=abstract-method, too-many-ancestors
         img_for_encoding = img_sequence[:, :-1, :, :, :]
         z_means, z_log_vars = self.encode_sequence(img_for_encoding)
 
-        # Predict latent codes for timesteps 2 to t
+        # Predict latent codes for timesteps 1 to t
         predictor_output = self.predictor([z_means, z_log_vars], training=training)
         z_means_hat = predictor_output[:, :, : self.latent_dim]
         z_log_vars_hat = predictor_output[:, :, self.latent_dim :]
@@ -823,8 +827,8 @@ class LEMON(Model):  # pylint: disable=abstract-method, too-many-ancestors
 
         2. Prediction loss: A binary cross-entropy term measuring how well the
            full model (encoder, predictor, decoder) can predict future images at
-           timesteps 2 to t given the sequence up to timestep t-1. This is the
-           primary predictive objective of the model.
+           timesteps 2 to t given the sequence up to timestep t-1. Note that
+           predictions for timestep 1 are discarded.
 
         3. KL divergence (pre-prediction): The Kullback-Leibler divergence between
            the encoded latent distributions and a standard normal distribution.
@@ -833,9 +837,9 @@ class LEMON(Model):  # pylint: disable=abstract-method, too-many-ancestors
            robust and meaningful.
 
         4. KL divergence (post-prediction): The Kullback-Leibler divergence between
-           the predicted latent distributions and a standard normal distribution.
-           This similarly regularizes the predicted latent codes to maintain the
-           same distributional properties as the encoded ones.
+           the predicted latent distributions (for timesteps 2 to t) and a standard
+           normal distribution. This similarly regularizes the predicted latent codes
+           to maintain the same distributional properties as the encoded ones.
 
         See Francois Chollet's "Deep Learning with Python", section 8.4, or
         Bishop & Bishop's "Deep Learning: Foundations and Concepts", chapter 19,
@@ -846,7 +850,7 @@ class LEMON(Model):  # pylint: disable=abstract-method, too-many-ancestors
                         `(batch_size, seq_len, width, height, channels)`.
         img_tilde       Reconstructed images from timesteps 0 to t-1, obtained by
                         encoding and then decoding the input images.
-        img_hat         Predicted images for timesteps 2 to t, obtained by encoding
+        img_hat         Predicted images for timesteps 1 to t, obtained by encoding
                         the input sequence, using the predictor to forecast future
                         latent codes, and decoding those predictions.
         z_means         Mean of the multivariate Gaussian over the latent space
@@ -854,9 +858,9 @@ class LEMON(Model):  # pylint: disable=abstract-method, too-many-ancestors
         z_log_vars      Logarithm of the variance of the multivariate Gaussian
                         over the latent space obtained by encoding timesteps 0 to t-1.
         z_means_hat     Mean of the multivariate Gaussian over the latent space
-                        predicted for timesteps 2 to t.
+                        predicted for timesteps 1 to t.
         z_log_vars_hat  Logarithm of the variance of the multivariate Gaussian
-                        over the latent space predicted for timesteps 2 to t.
+                        over the latent space predicted for timesteps 1 to t.
 
         This method does not return anything, instead it leverages the built-in
         `add_loss` method of `Model`.
@@ -869,10 +873,11 @@ class LEMON(Model):  # pylint: disable=abstract-method, too-many-ancestors
             binary_crossentropy(img_for_recon_flat, img_tilde_flat)
         )
 
-        # Prediction loss
+        # Prediction loss - use only predictions for timesteps 2 to t
         img_for_pred = img_sequence[:, 2:, :, :, :]
+        img_hat_for_pred = img_hat[:, 1:, :, :, :]  # discard prediction at timestep 1
         img_for_pred_flat = tf.reshape(img_for_pred, (tf.shape(img_for_pred)[0], -1))
-        img_hat_flat = tf.reshape(img_hat, (tf.shape(img_hat)[0], -1))
+        img_hat_flat = tf.reshape(img_hat_for_pred, (tf.shape(img_hat_for_pred)[0], -1))
         prediction_loss = tf.reduce_mean(
             binary_crossentropy(img_for_pred_flat, img_hat_flat)
         )
@@ -884,10 +889,13 @@ class LEMON(Model):  # pylint: disable=abstract-method, too-many-ancestors
             )
         )
 
-        # KL divergence for predicted latent codes
+        # KL divergence for predicted latent codes (timesteps 2 to t only)
         kl_post = -self.kl_regularization_parameter * tf.reduce_mean(
             tf.reduce_mean(
-                1 + z_log_vars_hat - tf.square(z_means_hat) - tf.exp(z_log_vars_hat),
+                1
+                + z_log_vars_hat[:, 1:]
+                - tf.square(z_means_hat[:, 1:])
+                - tf.exp(z_log_vars_hat[:, 1:]),
                 axis=-1,
             )
         )
@@ -928,48 +936,46 @@ class LEMON(Model):  # pylint: disable=abstract-method, too-many-ancestors
         z_mean, z_log_var = self.encode_sequence(initial_sequence)
         seq_len = tf.shape(z_mean)[1]
 
-        # Initialize LSTM state by feeding through initial sequence
+        # Initialize LSTM state
         h_state = tf.zeros((batch_size, 12 * latent_dim), dtype=tf.float32)
         c_state = tf.zeros((batch_size, 12 * latent_dim), dtype=tf.float32)
 
-        # Warm up LSTM state AND get first prediction
-        current_input = None
+        # Warm up LSTM state with the entire initial sequence
+        # At each step t, we feed timestep t and get a prediction for t+1
         for t in range(seq_len):
             current_input = tf.concat([z_mean[:, t], z_log_var[:, t]], axis=-1)
             current_input = tf.expand_dims(current_input, 1)
             rnn_output, h_state, c_state = self.predictor.lstm_cell(
                 current_input, initial_state=[h_state, c_state], training=False
             )
+            pred = self.predictor.output_layer(rnn_output)
 
-        # Get the first prediction from the warmed-up state
-        pred = self.predictor.output_layer(rnn_output)
+        # After the loop, pred is the prediction for timestep
+        # seq_len (first future timestep)
+        # Decode it as the first future prediction
+        pred_mean = pred[:, :latent_dim]
+        pred_log_var = pred[:, latent_dim:]
+        z_sample = self._sample(pred_mean, pred_log_var)
+        img = self.decoder(z_sample)
 
-        # Generate future predictions autoregressively
-        future_predictions = []
+        future_predictions = [img]
         current_input = tf.expand_dims(pred, 1)
 
-        for _ in range(num_future_steps):
-            # Predict next latent parameters
+        # Generate remaining future predictions
+        for _ in range(num_future_steps - 1):
             rnn_output, h_state, c_state = self.predictor.lstm_cell(
                 current_input, initial_state=[h_state, c_state], training=False
             )
             pred = self.predictor.output_layer(rnn_output)
 
-            # Split into mean and log_var
             pred_mean = pred[:, :latent_dim]
             pred_log_var = pred[:, latent_dim:]
-
-            # Sample from predicted distribution
             z_sample = self._sample(pred_mean, pred_log_var)
-
-            # Decode to image
             img = self.decoder(z_sample)
             future_predictions.append(img)
 
-            # Use prediction as next input
             current_input = tf.expand_dims(pred, 1)
 
-        # Stack predictions
         return tf.stack(future_predictions, axis=1)
 
 
