@@ -168,8 +168,8 @@ def inspect_memoryless_prediction(
     width, height, _ = img0.shape
 
     prediction = memoryless_model.predict_next_image(
-        np.expand_dimes(img0, axis=0),
-        np.expand_dimes(img1, axis=0),
+        np.expand_dims(img0, axis=0),
+        np.expand_dims(img1, axis=0),
     )[0]
 
     images_to_plot = (
