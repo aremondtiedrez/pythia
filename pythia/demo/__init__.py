@@ -19,8 +19,7 @@ def load_data(kind: str = "demo") -> tuple:
                             `demo` (default)    A small number of samples, issued from
                                                 the test data, for quick loading.
                             `collisionless`     Collisionless training samples.
-                            `training`          Training samples.
-                            `test`              Testing samples.
+                            `train_test`        Training and testing samples.
 
     Returns
     snapshot_timesteps      List of the times at which the image snapshots are recorded.
