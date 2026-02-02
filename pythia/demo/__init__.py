@@ -93,7 +93,7 @@ def load_model(name: str = None) -> "keras.Model":
         model = models.Memoryless(img_shape=(32, 32, 1), latent_dim=12)
         # Run the model on dummy data to build all the submodels
         dummy = np.zeros(shape=(1, 32, 32, 1))
-        _ = model.predict([dummy, dummy, dummy])
+        _ = model.predict([dummy, dummy, dummy], verbose=0)
         if name == "memoryless_full":
             model.load_weights(path)
         elif name == "memoryless_encoder":
