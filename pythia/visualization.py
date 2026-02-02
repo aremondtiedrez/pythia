@@ -72,6 +72,7 @@ def inspect(
         axis.set(xlim=(0, width), ylim=(height, 0), title=f"t = {snapshot_time:.1f}")
         axis.axis("off")
     plt.show()
+    plt.close()
 
     # Initial velocity
     print(f"Initial velocity:    {np.array2string(velocity, precision=2)}")
@@ -204,6 +205,7 @@ def inspect_memoryless_prediction(  # pylint: disable=too-many-arguments
         axis.set(xlim=(0, width), ylim=(height, 0), title=title)
         axis.axis("off")
     plt.show()
+    plt.close()
 
 
 def create_animation(images: np.ndarray, display_walls: bool = False) -> FuncAnimation:
