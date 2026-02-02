@@ -89,17 +89,18 @@ def load_model(name: str = None) -> "keras.Model":
 
     path = resources.files("pythia").joinpath("demo/models/" + name + ".weights.h5")
 
-    if name == "memoryless_full":
+    if name in ("memoryless_full", "memoryless_encoder", "memoryless_decoder"):
         model = models.Memoryless()
-        model.build(input_shape=(None, 32, 32, 1))
-        model.load_weights(path)
-    elif name == "memoryless_encoder":
-        model = models.Memoryless()
-        model = model.encoder
-        model.load_weights(path)
-    elif name == "memoryless_decoder":
-        model = models.Memoryless()
-        model = model.decoder
-        model.load_weights()
+        # Run the model on dummy data to build all the submodels
+        dummy = np.zeros(shape=(1, 32, 32, 1))
+        _ = model.predict([dummy, dummy, dummy])
+        if name == "memoryless_full":
+            model.load_weights(path)
+        elif name == "memoryless_encoder":
+            model = model.encoder
+            model.load_weights(path)
+        elif name == "memoryless_decoder":
+            model = model.decoder
+            model.load_weights(path)
 
     return model
