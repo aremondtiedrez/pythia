@@ -64,42 +64,21 @@ def load_data(kind: str = "demo") -> tuple:
     return snapshot_timesteps, positions, velocities, images
 
 
-def load_model(name: str = None) -> "keras.Model":
+def load_weights(model: "keras.Model", name: str = None) -> "keras.Model":
     """
-    Load one of the demonstration models.
+    Load the weights of one of the demonstration models.
+    The weights are loaded onto the model passed as an input,
+    which is then returned as an output.
 
-    The models that may be loaded are the following.
+    The models whose weights may be loaded are the following.
+
     name
-    memoryless_full         Model mapping two images in the immediate past to
-                            the next image in the immediate future. This model
-                            is primarily used because its training is used
-                            to pre-train the encoder-decoder pair.
-    memoryless_encoder      The encoder model which is part of the memoryless
-                            model above.
-    memoryless_decoder      The decoder model which is part of the memoryless
-                            model above.
-
-    Argument
-    name    String describing the model to load.
-
-    Returns
-    model   `keras.Model` object describing the model loaded.
+    memoryless_encoder      The encoder model which is part of the memoryless model
+                            (which predicts, given two images in the immediate past,
+                            the image in the immediate future).
+    memoryless_decoder      The decoder model which is part of the memoryless model.
     """
 
     path = resources.files("pythia").joinpath("demo/models/" + name + ".weights.h5")
-
-    if name in ("memoryless_full", "memoryless_encoder", "memoryless_decoder"):
-        model = models.Memoryless(img_shape=(32, 32, 1), latent_dim=12)
-        # Run the model on dummy data to build all the submodels
-        dummy = np.zeros(shape=(1, 32, 32, 1))
-        _ = model.predict([dummy, dummy, dummy], verbose=0)
-        if name == "memoryless_full":
-            model.load_weights(path)
-        elif name == "memoryless_encoder":
-            model = model.encoder
-            model.load_weights(path)
-        elif name == "memoryless_decoder":
-            model = model.decoder
-            model.load_weights(path)
-
+    model.load_weights(path)
     return model
