@@ -374,7 +374,7 @@ class Memoryless(Model):  # pylint: disable=abstract-method, too-many-ancestors
         total_loss = loss0 + loss1 + loss2
         self.add_loss(total_loss)
 
-    def predict_next_frame(self, img0, img1):
+    def predict_next_image(self, img0, img1):
         """
         Given two images in the immediate past, uses the full model (encoder, predictor,
         and decoder) to predict the next image in the immediate future.
