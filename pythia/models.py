@@ -1007,18 +1007,21 @@ class ScheduledSamplingCallback(Callback):
         self.decay_every = decay_every
         self.min_ratio = min_ratio
 
-    def on_train_begin(self):  # pylint:disable=arguments-differ
+    def on_train_begin(self, logs=None):  # pylint:disable=arguments-differ
         """
         Initialize the teacher forcing ratio at the start of training.
 
         This method is called automatically by Keras when training begins. It sets
         the predictor's teacher forcing ratio to the initial value specified when
         the callback was created.
+
+        Argument
+        logs        Dictionary containing training metrics (unused in this method).
         """
         self.model.predictor.teacher_forcing_ratio.assign(self.initial_ratio)
         print(f"\nStarting with teacher forcing ratio: {self.initial_ratio:.4f}")
 
-    def on_epoch_end(self, epoch):  # pylint:disable=arguments-differ
+    def on_epoch_end(self, epoch, logs=None):  # pylint:disable=arguments-differ
         """
         Decay the teacher forcing ratio at the end of specified epochs.
 
@@ -1029,6 +1032,7 @@ class ScheduledSamplingCallback(Callback):
 
         Arguments
         epoch       Zero-indexed epoch number (e.g., epoch 0 is the first epoch).
+        logs        Dictionary containing training metrics (unused in this method).
         """
         if (epoch + 1) % self.decay_every == 0:
             current_ratio = self.model.predictor.teacher_forcing_ratio.numpy()
