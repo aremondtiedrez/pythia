@@ -63,15 +63,15 @@ class Memoryless(Model):  # pylint: disable=abstract-method, too-many-ancestors
         self.latent_dim = latent_dim
         self.kl_regularization_parameter = kl_regularization_parameter
 
-        # Build the three components of the model
-        self.encoder = self._build_encoder()
-        self.decoder = self._build_decoder()
-        self.predictor = self._build_predictor()
-
         # `shape_before_flattening` is initialized when building the encoder and
         # ensures that the output of the encoder is consistent with the input
         # of the decoder
         self._shape_before_flattening = None
+
+        # Build the three components of the model
+        self.encoder = self._build_encoder()
+        self.decoder = self._build_decoder()
+        self.predictor = self._build_predictor()
 
     def _build_encoder(self) -> Model:
         """
@@ -573,8 +573,6 @@ class LEMON(Model):  # pylint: disable=abstract-method, too-many-ancestors
         # Build components
         self._shape_before_flattening = None
         self.encoder = self._build_encoder()
-        dummy = np.zeros((1,) + self.img_shape)
-        _ = self.encoder(dummy)
         self.decoder = self._build_decoder()
         self.predictor = self._build_predictor()
 
