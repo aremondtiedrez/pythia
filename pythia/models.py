@@ -492,7 +492,7 @@ class ScheduledSamplingPredictor(
                 next_input = pred
 
             next_input = tf.expand_dims(next_input, 1)
-            return t + 1, next_input, h_state_new, c_state_new, predictions
+            return [t + 1, next_input, h_state_new, c_state_new, predictions]
 
         def loop_cond(t, *_):
             return t < seq_len
