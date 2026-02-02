@@ -136,7 +136,7 @@ def inspect_sample(
     )
 
 
-def inspect_memoryless_prediction(  # pylint: disable=too-many-arguments
+def memoryless_prediction(  # pylint: disable=too-many-arguments
     snapshot_timesteps: list[float],
     img0: np.ndarray,
     img1: np.ndarray,
@@ -259,6 +259,46 @@ def create_animation(images: np.ndarray, display_walls: bool = False) -> FuncAni
     )
     plt.close()
     return animation
+
+
+def reconstruction(
+    true_image: np.ndarray,
+    encoder: "keras.Model",
+    decoder: "keras.Model",
+    display_walls: bool = False,
+) -> None:
+    """
+    Given a true image and an encoder-decoder pair,
+    use that pair to reconstruct the image and then visualize the difference.
+
+    Arguments
+    true_image      `numpy` array of shape `(width, height, 1)`, since the image
+                    is grayscale.
+    encoder         Model of class `keras.Model` used to encode the image
+                    into a latent space embedding
+    decoder         Model of class `keras.Model` used to decode a latent space
+                    embedding into an image.
+    display_walls   By default, the raw image is displayed, which does not include
+                    the walls delimiting the space in which the physical simulation
+                    takes place. This boolean argument can be used to display
+                    the walls as part of the visualization.
+    """
+    width, height, _ = true_image.shape
+
+    embedding = encoder.predict(np.expand_dims(true_image, axis=0))
+    reconstructed_image = decoder.predict(embedding)
+
+    images_to_plot = (true_image, reconstructed_image, true_image - reconstructed_image)
+    if display_walls:
+        images_to_plot = (_add_walls(image) for image in images_to_plot)
+    plot_titles = ("Truth", "Prediction", "Difference")
+    _, axes = plt.subplots(1, 3, figsize=(12, 3))
+    for axis, image, title in zip(axes, images_to_plot, plot_titles):
+        axis.imshow(image, cmap="gray")
+        axis.set(xlim=(0, width), ylim=(height, 0), title=title)
+        axis.axis("off")
+    plt.show()
+    plt.close()
 
 
 def _add_walls(input_image: np.ndarray, wall_location=4) -> np.ndarray:
