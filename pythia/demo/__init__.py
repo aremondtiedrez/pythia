@@ -64,7 +64,7 @@ def load_data(kind: str = "demo") -> tuple:
     return snapshot_timesteps, positions, velocities, images
 
 
-def load_weights(model: "keras.Model", name: str = None) -> "keras.Model":
+def load_weights(model: "keras.Model", name: str = "model") -> "keras.Model":
     """
     Load the weights of one of the demonstration models.
     The weights are loaded onto the model passed as an input,
@@ -77,6 +77,7 @@ def load_weights(model: "keras.Model", name: str = None) -> "keras.Model":
                             (which predicts, given two images in the immediate past,
                             the image in the immediate future).
     memoryless_decoder      The decoder model which is part of the memoryless model.
+    model                   The full model.
     """
 
     path = resources.files("pythia").joinpath("demo/models/" + name + ".weights.h5")
