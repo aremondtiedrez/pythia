@@ -90,7 +90,7 @@ def load_model(name: str = None) -> "keras.Model":
     path = resources.files("pythia").joinpath("demo/models/" + name + ".weights.h5")
 
     if name in ("memoryless_full", "memoryless_encoder", "memoryless_decoder"):
-        model = models.Memoryless()
+        model = models.Memoryless(img_shape=(32, 32, 1), latent_dim=12)
         # Run the model on dummy data to build all the submodels
         dummy = np.zeros(shape=(1, 32, 32, 1))
         _ = model.predict([dummy, dummy, dummy])
