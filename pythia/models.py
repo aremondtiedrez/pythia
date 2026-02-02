@@ -549,7 +549,7 @@ class LEMON(Model):  # pylint: disable=abstract-method, too-many-ancestors
     """
 
     def __init__(
-        self, img_shape=(32, 32, 1), latent_dim=6, kl_regularization_parameter=5e-5
+        self, img_shape=(32, 32, 1), latent_dim=12, kl_regularization_parameter=5e-5
     ):
         """
         Initialize an instance of the `SequenceVAE` model class.
