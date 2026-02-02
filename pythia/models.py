@@ -963,7 +963,7 @@ class LEMON(Model):  # pylint: disable=abstract-method, too-many-ancestors
             img = self.decoder(z_sample)
             future_predictions.append(img)
 
-            # Use prediction as next input
+            # Use prediction as next input (THIS IS THE KEY FIX)
             current_input = tf.expand_dims(pred, 1)
 
         # Stack predictions
