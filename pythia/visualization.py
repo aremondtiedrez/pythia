@@ -8,6 +8,8 @@ import numpy as np
 
 from matplotlib.animation import FuncAnimation
 
+from . import models
+
 
 def inspect(
     snapshot_timesteps: list[float],
@@ -177,7 +179,7 @@ def memoryless_prediction(  # pylint: disable=too-many-arguments
 
     width, height, _ = img0.shape
 
-    prediction = memoryless_model.predict_next_image(
+    predicted_image = memoryless_model.predict_next_image(
         np.expand_dims(img0, axis=0),
         np.expand_dims(img1, axis=0),
     )[0]
@@ -185,9 +187,9 @@ def memoryless_prediction(  # pylint: disable=too-many-arguments
     images_to_plot = (
         img0,
         img1,
-        prediction,
+        predicted_image,
         img2,
-        img2 - prediction,
+        img2 - predicted_image,
     )
     if display_walls:
         images_to_plot = (_add_walls(image) for image in images_to_plot)
@@ -299,6 +301,64 @@ def reconstruction(
         axis.imshow(image, cmap="gray")
         axis.set(xlim=(0, width), ylim=(height, 0), title=title)
         axis.axis("off")
+    plt.show()
+    plt.close()
+
+
+def prediction(  # pylint: disable=missing-function-docstring, too-many-arguments, too-many-locals
+    encoder,
+    predictor,
+    decoder,
+    latent_dim,
+    snapshot_timesteps,
+    ground_truth_images,
+    n_past_steps,
+    n_future_steps,
+):
+
+    n_timesteps = ground_truth_images.shape[0]
+    if n_timesteps != n_past_steps + n_future_steps:
+        raise ValueError(
+            "n_past_steps and n_future_steps must add up to "
+            "the number of timesteps in ground_truth_images"
+        )
+
+    # Make predictions
+    images_in_past = ground_truth_images[:n_past_steps]
+    predicted_images = np.array(
+        models.predict_future(
+            encoder, predictor, decoder, latent_dim, images_in_past, n_future_steps
+        )
+    )[0]
+
+    # Create plots
+    figure, axes = plt.subplots(3, n_timesteps, figsize=(2 * n_timesteps, 5))
+    for timestep_index in range(n_timesteps):
+        axes[0, timestep_index].imshow(ground_truth_images[timestep_index], cmap="gray")
+        if timestep_index >= n_past_steps:
+            axes[1, timestep_index].imshow(
+                predicted_images[timestep_index - n_past_steps], cmap="gray"
+            )
+            axes[2, timestep_index].imshow(
+                ground_truth_images[timestep_index]
+                - predicted_images[timestep_index - n_past_steps],
+                cmap="gray",
+            )
+    # Row labels
+    row_labels = ("Truth", "Prediction", "Difference")
+    for pos_index, row_label in enumerate(row_labels):
+        # Get the bounding box of the leftmost subplot in this row
+        bbox = axes[pos_index, 0].get_position()
+        y_center = (bbox.y0 + bbox.y1) / 2  # Vertical center of the row
+        figure.text(0.02, y_center, row_label, va="center")
+    # Column labels
+    col_labels = (f"t = {timestep:.1f}" for timestep in snapshot_timesteps)
+    for axis, col_label in zip(axes[0, :], col_labels):
+        axis.set_title(col_label)
+    # Hide axes
+    for axis in axes.flatten():
+        axis.axis("off")
+
     plt.show()
     plt.close()
 

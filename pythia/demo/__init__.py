@@ -4,8 +4,6 @@ from importlib import resources
 
 import numpy as np
 
-from .. import models
-
 
 def load_data(kind: str = "demo") -> tuple:
     """
