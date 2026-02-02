@@ -571,11 +571,12 @@ class LEMON(Model):  # pylint: disable=abstract-method, too-many-ancestors
         self.kl_regularization_parameter = kl_regularization_parameter
 
         # Build components
+        self._shape_before_flattening = None
         self.encoder = self._build_encoder()
+        dummy = np.zeros((1,) + self.img_shape)
+        _ = self.encoder(dummy)
         self.decoder = self._build_decoder()
         self.predictor = self._build_predictor()
-
-        self._shape_before_flattening = None
 
     def _build_encoder(self) -> Model:
         """
