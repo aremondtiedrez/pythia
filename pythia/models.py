@@ -702,3 +702,61 @@ class ScheduledSamplingCallback(Callback):
             new_ratio = max(self.min_ratio, current_ratio * self.decay_rate)
             self.predictor.teacher_forcing_ratio.assign(new_ratio)
             print(f"\nEpoch {epoch+1}: Teacher forcing ratio = {new_ratio:.4f}")
+
+
+def predict_future(  # pylint:disable=missing-function-docstring, too-many-locals, too-many-arguments, too-many-arguments
+    encoder, predictor, decoder, latent_dim, initial_sequence, n_future_steps
+):
+
+    batch_size = tf.shape(initial_sequence)[0]
+
+    # Encode initial sequence to get latent codes
+    initial_flat = tf.reshape(initial_sequence, (-1, 32, 32, 1))
+    z_mean, z_log_var = encoder(initial_flat)
+
+    # Reshape back to sequence
+    seq_len = tf.shape(initial_sequence)[1]
+    z_mean = tf.reshape(z_mean, (batch_size, seq_len, latent_dim))
+    z_log_var = tf.reshape(z_log_var, (batch_size, seq_len, latent_dim))
+
+    # Initialize LSTM state by feeding through initial sequence
+    h_state = tf.zeros((batch_size, 12 * latent_dim), dtype=tf.float32)
+    c_state = tf.zeros((batch_size, 12 * latent_dim), dtype=tf.float32)
+
+    # Process initial sequence to warm up LSTM state
+    for t in range(seq_len):
+        current_input = tf.concat([z_mean[:, t], z_log_var[:, t]], axis=-1)
+        current_input = tf.expand_dims(current_input, 1)
+        _, h_state, c_state = predictor.lstm_cell(
+            current_input, initial_state=[h_state, c_state], training=False
+        )
+
+    # Generate future predictions autoregressively
+    future_predictions = []
+    current_input = tf.concat([z_mean[:, -1], z_log_var[:, -1]], axis=-1)
+    current_input = tf.expand_dims(current_input, 1)
+
+    for _ in range(n_future_steps):
+        # Predict next latent parameters
+        rnn_output, h_state, c_state = predictor.lstm_cell(
+            current_input, initial_state=[h_state, c_state], training=False
+        )
+        pred = predictor.output_layer(rnn_output)
+
+        # Split into mean and log_var
+        pred_mean = pred[:, :latent_dim]
+        pred_log_var = pred[:, latent_dim:]
+
+        # Sample from predicted distribution
+        epsilon = tf.random.normal(shape=tf.shape(pred_mean))
+        z_sample = pred_mean + tf.exp(pred_log_var) * epsilon
+
+        # Decode to image
+        img = decoder(z_sample)
+        future_predictions.append(img)
+
+        # Use prediction as next input
+        current_input = tf.expand_dims(pred, 1)
+
+    # Stack predictions
+    return tf.stack(future_predictions, axis=1)
