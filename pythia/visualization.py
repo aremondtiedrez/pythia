@@ -309,6 +309,7 @@ def prediction(  # pylint: disable=missing-function-docstring, too-many-argument
     predicted_images,
     n_past_steps,
     n_future_steps,
+    display_walls: bool = False,
 ):
 
     n_timesteps = ground_truth_images.shape[0]
@@ -319,18 +320,23 @@ def prediction(  # pylint: disable=missing-function-docstring, too-many-argument
         )
 
     # Add walls
+    wrapper = (lambda x: x) if not display_walls else _add_walls
 
     # Create plots
     figure, axes = plt.subplots(3, n_timesteps, figsize=(2 * n_timesteps, 5))
     for timestep_index in range(n_timesteps):
-        axes[0, timestep_index].imshow(ground_truth_images[timestep_index], cmap="gray")
+        axes[0, timestep_index].imshow(
+            wrapper(ground_truth_images[timestep_index]), cmap="gray"
+        )
         if timestep_index >= n_past_steps:
             axes[1, timestep_index].imshow(
-                predicted_images[timestep_index - n_past_steps], cmap="gray"
+                wrapper(predicted_images[timestep_index - n_past_steps]), cmap="gray"
             )
             axes[2, timestep_index].imshow(
-                ground_truth_images[timestep_index]
-                - predicted_images[timestep_index - n_past_steps],
+                wrapper(
+                    ground_truth_images[timestep_index]
+                    - predicted_images[timestep_index - n_past_steps]
+                ),
                 cmap="gray",
             )
     # Row labels
@@ -359,6 +365,7 @@ def animated_prediction(  # pylint: disable=too-many-arguments, too-many-locals,
     n_future_steps,
     pause_duration: int = 2_000,  # In milliseconds
     frame_interval: int = 250,  # Also in milliseconds
+    display_walls: bool = False,
 ):
 
     n_timesteps, width, height, _ = ground_truth_images.shape
@@ -421,7 +428,8 @@ def animated_prediction(  # pylint: disable=too-many-arguments, too-many-locals,
     )
     frames.extend([second_pause_frame for _ in range(n_pause_frames)])
 
-    # Add the walls
+    if display_walls:
+        frames = [_add_walls(frame) for frame in frames]
 
     # Initialize the animation
     figure, axes = plt.subplots(figsize=(4, 4))
