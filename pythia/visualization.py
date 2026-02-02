@@ -98,6 +98,9 @@ def inspect_sample(
     `inspect` handles a single sample at a time).
 
     Arguments
+    index                       index of the sample to observe, which is an index
+                                along the first dimension of `positions`, `velocities`,
+                                and `images`.
     snapshot_timesteps          List of the times at which the image snapshots
                                 are recorded. Provided so that these times
                                 can be used as legend for the plots.
@@ -132,12 +135,13 @@ def inspect_sample(
     )
 
 
-def inspect_memoryless_prediction(
+def inspect_memoryless_prediction(  # pylint: disable=too-many-arguments
     snapshot_timesteps: list[float],
     img0: np.ndarray,
     img1: np.ndarray,
     img2: np.ndarray,
     memoryless_model: "pythia.models.Memoryless",
+    display_walls: bool = False,
 ) -> None:
     """
     Given a training sample for the memoryless model and a trained instance
@@ -163,6 +167,11 @@ def inspect_memoryless_prediction(
     memoryless_model        Model defined in `models.Memoryless` which takes as input
                             two images in the immediate past, such as `img0` and `img1`,
                             and predicts the image in the immediate future.
+    display_walls           By default, the raw image is displayed, which does
+                            not include the walls delimiting the space in which
+                            the physical simulation takes place. This boolean argument
+                            can be used to display the walls as part of
+                            the visualization.
     """
 
     width, height, _ = img0.shape
@@ -179,6 +188,8 @@ def inspect_memoryless_prediction(
         img2,
         img2 - prediction,
     )
+    if display_walls:
+        images_to_plot = (_add_walls(image) for image in images_to_plot)
     plot_titles = (
         f"Past image at t = {snapshot_timesteps[0]}",
         f"Past image at t = {snapshot_timesteps[1]}",
