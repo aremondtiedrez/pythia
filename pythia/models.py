@@ -1,4 +1,4 @@
-# pylint:disable=too-many-lines
+# pylint:disable=too-many-lines, import-error, no-name-in-module
 """
 This module defines the deep learning models used in PyThia,
 which are built using `keras`.
@@ -7,10 +7,10 @@ which are built using `keras`.
 import numpy as np
 import tensorflow as tf
 
-from keras import layers, Model, ops
-from keras.callbacks import Callback
-from keras.random import normal
-from keras.losses import binary_crossentropy
+from tensorflow.keras import layers, Model, ops
+from tensorflow.keras.callbacks import Callback
+from tensorflow.keras.losses import binary_crossentropy
+from tensorflow.keras import backend as K
 
 
 class Memoryless(Model):  # pylint: disable=abstract-method, too-many-ancestors
@@ -165,7 +165,7 @@ class Memoryless(Model):  # pylint: disable=abstract-method, too-many-ancestors
         with mean `z_mean` and variance `exp(z_log_var)`.
         """
         batch_size = ops.shape(z_mean)[0]
-        epsilon = normal(shape=(batch_size, self.latent_dim))
+        epsilon = K.random_normal(shape=(batch_size, self.latent_dim))
         return z_mean + ops.exp(z_log_var) * epsilon
 
     def encode(self, images):
@@ -406,80 +406,89 @@ class Memoryless(Model):  # pylint: disable=abstract-method, too-many-ancestors
         return x2
 
 
-class ScheduledSamplingPredictor(  # pylint: disable=abstract-method, too-many-ancestors
-    layers.Layer
+def build_model(  # pylint:disable=missing-function-docstring, too-many-locals, too-many-statements
+    img_shape=(32, 32, 1), latent_dim=12
 ):
-    """
-    RNN predictor with scheduled sampling for curriculum learning.
 
-    This layer implements an LSTM-based predictor that learns to forecast future
-    latent space embeddings in a sequence. It uses scheduled sampling, a curriculum
-    learning technique that gradually transitions from teacher forcing (where the
-    model is fed ground truth values during training) to autoregressive prediction
-    (where the model uses its own predictions as inputs).
+    class ScheduledSamplingPredictor(layers.Layer):
+        """
+        RNN predictor with scheduled sampling for curriculum learning.
 
-    The transition is controlled by `teacher_forcing_ratio`, which starts at 1.0
-    (100% teacher forcing) and is gradually decayed during training. At each training
-    step, the model randomly decides whether to use the ground truth or its own
-    prediction based on this ratio. During inference, the model always uses its own
-    predictions (autoregressive mode).
+        Gradually transitions from teacher forcing (using ground truth) to
+        autoregressive prediction (using own outputs) during training.
+        """
 
-    This approach helps the model learn more robust predictions by gradually
-    exposing it to its own errors during training, rather than experiencing a
-    sudden shift from perfect inputs to imperfect ones at inference time.
-    """
-
-    def __init__(self, latent_dim, **kwargs):
-        super().__init__(**kwargs)
-        self.latent_dim = latent_dim
-        self.teacher_forcing_ratio = tf.Variable(1.0, trainable=False, dtype=tf.float32)
-        self.lstm_cell = layers.LSTM(
-            units=12 * latent_dim,
-            return_sequences=False,
-            return_state=True,
-            activation="relu",
-            kernel_initializer="he_normal",
-        )
-        self.output_layer = layers.Dense(units=2 * latent_dim, activation="linear")
-
-    def build(self, input_shape):
-        # Build layers with known input shapes
-        self.lstm_cell.build((None, 1, 2 * self.latent_dim))
-        self.output_layer.build((None, 12 * self.latent_dim))
-        super().build(input_shape)
-
-    def call(self, inputs, training=None):  # pylint:disable=arguments-differ
-        z_means, z_log_vars = inputs
-        batch_size = tf.shape(z_means)[0]
-        seq_len = tf.shape(z_means)[1]
-
-        h_state = tf.zeros((batch_size, 12 * self.latent_dim), dtype=tf.float32)
-        c_state = tf.zeros((batch_size, 12 * self.latent_dim), dtype=tf.float32)
-
-        # Predictor outputs seq_len predictions (for timesteps 1 to t)
-        predictions = tf.TensorArray(
-            dtype=tf.float32,
-            size=seq_len,
-            dynamic_size=False,
-            clear_after_read=False,
-        )
-
-        def loop_body(t, current_input, h_state, c_state, predictions):
-            # Use current_input (at timestep t) to predict t+1
-            rnn_output, h_state_new, c_state_new = self.lstm_cell(
-                current_input, initial_state=[h_state, c_state], training=training
+        def __init__(self, **kwargs):
+            super().__init__(**kwargs)
+            self.teacher_forcing_ratio = tf.Variable(
+                1.0, trainable=False, dtype=tf.float32
             )
-            pred = self.output_layer(rnn_output)
-            # Save prediction for timestep t+1 at index t
-            predictions = predictions.write(t, pred)
+            self.lstm_cell = layers.LSTM(
+                units=12 * latent_dim,
+                return_sequences=False,
+                return_state=True,
+                activation="relu",
+                kernel_initializer="he_normal",
+            )
+            self.output_layer = layers.Dense(units=2 * latent_dim, activation="linear")
 
-            # For next iteration: decide between ground truth at t+1 or prediction
-            if t + 1 < seq_len:
-                ground_truth = tf.concat(
-                    [z_means[:, t + 1], z_log_vars[:, t + 1]], axis=-1
+        def build(self, input_shape):  # pylint:disable=missing-function-docstring
+            # Build layers with known input shapes to avoid
+            # runtime shape inference issues
+            self.lstm_cell.build((None, 1, 2 * latent_dim))
+            self.output_layer.build((None, 12 * latent_dim))
+            super().build(input_shape)
+
+        def compute_output_shape(
+            self, input_shape
+        ):  # pylint:disable=missing-function-docstring
+            # Output: (batch, seq_len-1, 2*latent_dim)
+            # We predict timesteps 2 to t from inputs 0 to t-1
+            batch_size = input_shape[0][0]
+            seq_len = input_shape[0][1]
+            if seq_len is not None:
+                return (batch_size, seq_len - 1, 2 * latent_dim)
+            return (batch_size, None, 2 * latent_dim)
+
+        def call(
+            self, inputs, training=None
+        ):  # pylint:disable=missing-function-docstring
+            z_means, z_log_vars = inputs
+            batch_size = tf.shape(z_means)[0]
+            seq_len = tf.shape(z_means)[1]
+
+            # Initialize LSTM hidden and cell states
+            h_state = tf.zeros((batch_size, 12 * latent_dim), dtype=tf.float32)
+            c_state = tf.zeros((batch_size, 12 * latent_dim), dtype=tf.float32)
+
+            # TensorArray to collect predictions
+            predictions = tf.TensorArray(
+                dtype=tf.float32,
+                size=seq_len - 1,
+                dynamic_size=False,
+                clear_after_read=False,
+            )
+
+            # Start with timestep 0 as input
+            current_input = tf.concat([z_means[:, 0], z_log_vars[:, 0]], axis=-1)
+            current_input = tf.expand_dims(
+                current_input, 1
+            )  # Shape: (batch, 1, 2*latent_dim)
+
+            def loop_body(t, current_input, h_state, c_state, predictions):
+                # Get prediction for timestep t+1 using input from timestep t-1
+                rnn_output, h_state_new, c_state_new = self.lstm_cell(
+                    current_input, initial_state=[h_state, c_state], training=training
                 )
+                pred = self.output_layer(rnn_output)  # Shape: (batch, 2*latent_dim)
+                predictions = predictions.write(t - 1, pred)
 
+                # Ground truth at timestep t
+                ground_truth = tf.concat([z_means[:, t], z_log_vars[:, t]], axis=-1)
+
+                # Scheduled sampling: choose input for next iteration
                 if training:
+                    # Randomly use ground truth or prediction based on current ratio
                     use_ground_truth = (
                         tf.random.uniform([], dtype=tf.float32)
                         < self.teacher_forcing_ratio
@@ -488,311 +497,35 @@ class ScheduledSamplingPredictor(  # pylint: disable=abstract-method, too-many-a
                         use_ground_truth, lambda: ground_truth, lambda: pred
                     )
                 else:
+                    # During inference, always use model's predictions (autoregressive)
                     next_input = pred
 
                 next_input = tf.expand_dims(next_input, 1)
-            else:
-                next_input = pred  # dummy value for last iteration
+                return t + 1, next_input, h_state_new, c_state_new, predictions
 
-            return [t + 1, next_input, h_state_new, c_state_new, predictions]
+            def loop_cond(t, *_):
+                return t < seq_len
 
-        def loop_cond(t, *_):
-            return t < seq_len
+            # Execute loop using tf.while_loop for graph compatibility
+            _, _, _, _, predictions = tf.while_loop(
+                loop_cond,
+                loop_body,
+                [tf.constant(1), current_input, h_state, c_state, predictions],
+                parallel_iterations=1,  # Sequential execution required for RNN
+                maximum_iterations=1000,  # Set max for XLA compilation
+            )
 
-        # Start at t=0 with ground truth from timestep 0
-        initial_input = tf.concat([z_means[:, 0], z_log_vars[:, 0]], axis=-1)
-        initial_input = tf.expand_dims(initial_input, 1)
+            # Stack and transpose:
+            # (seq_len-1, batch, 2*latent_dim) -> (batch, seq_len-1, 2*latent_dim)
+            return tf.transpose(predictions.stack(), [1, 0, 2])
 
-        _, _, _, _, predictions = tf.while_loop(
-            loop_cond,
-            loop_body,
-            [tf.constant(0), initial_input, h_state, c_state, predictions],
-            parallel_iterations=1,
-            maximum_iterations=1000,
-        )
-
-        return tf.transpose(predictions.stack(), [1, 0, 2])
-
-
-class LEMON(Model):  # pylint: disable=abstract-method, too-many-ancestors
-    """
-    This model performs the following task: given a sequence of images, it learns
-    to predict future images in the sequence.
-
-    It does so by combining three components: an encoder, a decoder, and a predictor.
-    The encoder-decoder pair maps between images and latent space embeddings, inspired
-    by variational autoencoders. The predictor is an LSTM-based network that takes
-    the sequence of latent embeddings and predicts future latent embeddings, which
-    are then decoded back into images.
-
-    The predictor uses scheduled sampling, a curriculum learning technique that
-    gradually transitions from teacher forcing (using ground truth latent codes during
-    training) to autoregressive prediction (using the model's own predictions). This
-    helps the model learn more robust predictions by gradually exposing it to its
-    own errors during training.
-
-    The encoder-decoder architecture is adapted from section 8.4 "Generating images with
-    variational autoencoders" from Francois Chollet's book "Deep Learning with Python".
-    The scheduled sampling technique helps bridge the gap between training (with
-    perfect inputs) and inference (with the model's own predictions).
-
-    During training, the model optimizes four loss components:
-    1. Reconstruction loss: How well the encoder-decoder pair can reconstruct
-       the input images (for timesteps 0 to t-1).
-    2. Prediction loss: How well the full model (encoder, predictor, decoder)
-       can predict future images (for timesteps 2 to t). Note that predictions
-       for timestep 1 are discarded.
-    3. KL divergence (pre-prediction): Regularization term for the encoded latent
-       distributions, encouraging them to be close to a standard normal distribution.
-    4. KL divergence (post-prediction): Regularization term for the predicted latent
-       distributions (for timesteps 2 to t), similarly encouraging normality.
-
-    These loss components together ensure that the latent space is well-structured
-    and that the model learns meaningful features for both reconstruction and
-    prediction.
-    """
-
-    def __init__(
-        self, img_shape=(32, 32, 1), latent_dim=12, kl_regularization_parameter=5e-5
+    class CustomVariationalLayer(  # pylint:disable=missing-class-docstring, too-few-public-methods
+        layers.Layer
     ):
-        """
-        Initialize an instance of the `SequenceVAE` model class.
-
-        Arguments
-        img_shape                       The shape of the images passed as inputs to
-                                        the model and returned as output by the model.
-                                        Expected to be `(width, height, 1)`
-                                        (The last dimension being `1` means that
-                                        the model expects grayscale images.)
-        latent_dim                      The dimension of the latent space.
-        kl_regularization_parameter     A regularization parameter appearing in front
-                                        of Kullback-Leibler divergence terms in the loss
-                                        function.
-        """
-        super().__init__()
-        self.img_shape = img_shape
-        self.latent_dim = latent_dim
-        self.kl_regularization_parameter = kl_regularization_parameter
-
-        # Build components
-        self._shape_before_flattening = None
-        self.encoder = self._build_encoder()
-        self.decoder = self._build_decoder()
-        self.predictor = self._build_predictor()
-
-    def _build_encoder(self) -> Model:
-        """
-        Build the encoder.
-
-        The encoder is a convolutional neural network which maps images
-        to latent space embeddings.
-
-        Returns
-        `tensorflow.keras.Model` object describing the encoder.
-        """
-        input_img = layers.Input(shape=self.img_shape)
-
-        x = layers.Conv2D(32, 3, padding="same", activation="relu")(input_img)
-        x = layers.Conv2D(64, 3, padding="same", activation="relu", strides=2)(x)
-        x = layers.Conv2D(64, 3, padding="same", activation="relu")(x)
-        x = layers.Conv2D(64, 3, padding="same", activation="relu")(x)
-
-        self._shape_before_flattening = x.shape[1:]
-
-        x = layers.Flatten()(x)
-        x = layers.Dense(32, activation="relu")(x)
-
-        z_mean = layers.Dense(self.latent_dim, name="z_mean")(x)
-        z_log_var = layers.Dense(self.latent_dim, name="z_log_var")(x)
-
-        return Model(input_img, [z_mean, z_log_var], name="encoder")
-
-    def _build_decoder(self) -> Model:
-        """
-        Build the decoder.
-
-        The decoder is a convolutional neural network which maps latent space embeddings
-        to images.
-
-        Returns
-        `tensorflow.keras.Model` object describing the decoder.
-        """
-        decoder_input = layers.Input(shape=(self.latent_dim,))
-
-        x = layers.Dense(np.prod(self._shape_before_flattening), activation="relu")(
-            decoder_input
-        )
-        x = layers.Reshape(self._shape_before_flattening)(x)
-        x = layers.Conv2DTranspose(32, 3, padding="same", activation="relu", strides=2)(
-            x
-        )
-        x = layers.Conv2DTranspose(1, 3, padding="same", activation="sigmoid")(x)
-
-        return Model(decoder_input, x, name="decoder")
-
-    def _build_predictor(self) -> ScheduledSamplingPredictor:
-        """
-        Build the predictor.
-
-        The predictor is an LSTM-based neural network with scheduled sampling that
-        takes a sequence of latent space embeddings and predicts future latent space
-        embeddings. It uses curriculum learning to gradually transition from teacher
-        forcing (using ground truth) to autoregressive prediction
-        (using its own outputs).
-
-        Returns
-        `ScheduledSamplingPredictor` object describing the predictor.
-        """
-        return ScheduledSamplingPredictor(self.latent_dim, name="predictor")
-
-    def _sample(self, z_mean, z_log_var):
-        """
-        Sample from the distribution over the latent space
-        using the reparametrization trick.
-
-        See Chapter 19. "Autoencoders" from Bishop and Bishop's "Deep Learning:
-        Foundations and Concepts" for details on the reparametrization trick.
-
-        Arguments
-        z_mean      Mean of the latent space distribution, which is assumed to be
-                    a multivariate Gaussian.
-        z_log_var   Logarithm of the variance of the latent space distribution,
-                    which is assumed to be a multivariate Gaussian.
-
-        Returns
-        A vector in latent space sampled from the multivariate Gaussian distribution
-        with mean `z_mean` and variance `exp(z_log_var)`.
-        """
-        epsilon = tf.random.normal(shape=tf.shape(z_mean))
-        return z_mean + tf.exp(z_log_var) * epsilon
-
-    def encode_sequence(self, img_sequence):
-        """
-        Encode a sequence of images into latent space embeddings.
-
-        This method processes an entire sequence of images through the encoder
-        by flattening the sequence dimension, encoding all images in parallel,
-        and then reshaping back to sequence format.
-
-        Arguments
-        img_sequence    Array with shape
-                        `(batch_size, seq_len, width, height, channels)`,
-                        where typically `channels = 1`.
-
-        Returns
-        Tuple `(z_mean_seq, z_log_var_seq)` where both arrays have shape
-        `(batch_size, seq_len, latent_dim)`, representing the mean and log-variance
-        of the latent space distributions for each image in the sequence.
-        """
-        # Get dynamic shapes
-        shape = tf.shape(img_sequence)
-        batch_size = shape[0]
-        seq_len = shape[1]
-
-        # Flatten sequence for batch encoding
-        img_flat = tf.reshape(img_sequence, (-1,) + self.img_shape)
-        z_mean_flat, z_log_var_flat = self.encoder(img_flat)
-
-        # Reshape back to sequence
-        z_mean_seq = tf.reshape(z_mean_flat, (batch_size, seq_len, self.latent_dim))
-        z_log_var_seq = tf.reshape(
-            z_log_var_flat, (batch_size, seq_len, self.latent_dim)
-        )
-
-        return z_mean_seq, z_log_var_seq
-
-    def decode_sequence(self, z_sequence):
-        """
-        Decode a sequence of latent codes into images.
-
-        This method processes an entire sequence of latent space embeddings through
-        the decoder by flattening the sequence dimension, decoding all embeddings
-        in parallel, and then reshaping back to sequence format.
-
-        Arguments
-        z_sequence      Array with shape `(batch_size, seq_len, latent_dim)` encoding
-                        a sequence of samples in the latent space.
-
-        Returns
-        Array with shape `(batch_size, seq_len, width, height, channels)`,
-        where typically `channels = 1`, of the images decoded from the
-        embedding vectors passed as inputs.
-        """
-        batch_size = tf.shape(z_sequence)[0]
-        seq_len = tf.shape(z_sequence)[1]
-
-        # Flatten sequence for batch decoding
-        z_flat = tf.reshape(z_sequence, (-1, self.latent_dim))
-        img_flat = self.decoder(z_flat)
-
-        # Reshape back to sequence
-        img_sequence = tf.reshape(img_flat, (batch_size, seq_len) + self.img_shape)
-
-        return img_sequence
-
-    def call(self, inputs, training=None):  # pylint:disable=arguments-differ
-        """
-        Forward pass through the model, first through the encoder to obtain latent
-        embeddings of the input sequence, then through the predictor to forecast
-        future latent embeddings, and finally through the decoder to reconstruct
-        and predict images.
-
-        The forward pass proceeds as follows:
-        1. Encode images at timesteps 0 to t-1 into latent space embeddings
-           (mean and log-variance).
-        2. Pass the encoded sequence through the predictor to obtain predicted
-           latent embeddings for timesteps 1 to t.
-        3. Sample from both the encoded and predicted latent distributions using
-           the reparametrization trick.
-        4. Decode both sets of samples to obtain reconstructed images (for timesteps
-           0 to t-1) and predicted images (for timesteps 1 to t).
-
-        During training, this method also computes and adds four loss components:
-        reconstruction loss, prediction loss (using only predictions for timesteps
-        2 to t), and two KL divergence regularization terms (see `_add_losses`
-        for details).
-
-        Arguments
-        inputs      Image sequence with shape
-                    `(batch_size, seq_len, width, height, channels)`.
-
-                    The model uses timesteps 0 to t-1 as inputs for reconstruction and
-                    prediction. Predictions for timesteps 1 to t are generated, but
-                    only predictions for timesteps 2 to t are used in the loss.
-        training    Boolean indicating to built-in `keras` methods whether or not
-                    the model is currently in training mode.
-
-        Returns
-        Array with shape `(batch_size, 1, width, height, channels)` containing the
-        first image of the input sequence. This is a dummy output required by the
-        `keras` API, as the actual predictions are computed internally and losses
-        are added via `self.add_loss()`.
-
-        Note that in practice the model is not directly called via this method, or via
-        the built-in `keras` method `predict`. Instead, the function `predict_future`
-        is used to generate future predictions autoregressively.
-        """
-        img_sequence = inputs
-
-        # Encode images at timesteps 0 to t-1
-        img_for_encoding = img_sequence[:, :-1, :, :, :]
-        z_means, z_log_vars = self.encode_sequence(img_for_encoding)
-
-        # Predict latent codes for timesteps 1 to t
-        predictor_output = self.predictor([z_means, z_log_vars], training=training)
-        z_means_hat = predictor_output[:, :, : self.latent_dim]
-        z_log_vars_hat = predictor_output[:, :, self.latent_dim :]
-
-        # Sample and decode for reconstruction
-        z_samples_encoded = self._sample(z_means, z_log_vars)
-        img_tilde = self.decode_sequence(z_samples_encoded)
-
-        # Sample and decode for prediction
-        z_samples_predicted = self._sample(z_means_hat, z_log_vars_hat)
-        img_hat = self.decode_sequence(z_samples_predicted)
-
-        if training:
-            self._add_losses(
+        def call(
+            self, inputs
+        ):  # pylint:disable=missing-function-docstring, too-many-locals
+            (
                 img_sequence,
                 img_tilde,
                 img_hat,
@@ -800,252 +533,172 @@ class LEMON(Model):  # pylint: disable=abstract-method, too-many-ancestors
                 z_log_vars,
                 z_means_hat,
                 z_log_vars_hat,
+            ) = inputs
+
+            # Reconstruction error
+            img_for_recon = img_sequence[:, :-1, :, :, :]
+            img_for_recon_flat = K.flatten(img_for_recon)
+            img_tilde_flat = K.flatten(img_tilde)
+            reconstruction_loss = K.mean(
+                binary_crossentropy(img_for_recon_flat, img_tilde_flat)
             )
 
-        # Return dummy output
-        return img_sequence[:, 0:1, :, :, :]
-
-    def _add_losses(  # pylint:disable=too-many-arguments, too-many-locals
-        self,
-        img_sequence,
-        img_tilde,
-        img_hat,
-        z_means,
-        z_log_vars,
-        z_means_hat,
-        z_log_vars_hat,
-    ):
-        """
-        Compute and combine the loss components for training.
-
-        The loss has four components:
-
-        1. Reconstruction loss: A binary cross-entropy term measuring how well
-           the encoder-decoder pair can reconstruct the input images at timesteps
-           0 to t-1. This ensures the encoder-decoder learns to preserve image
-           information through the latent space bottleneck.
-
-        2. Prediction loss: A binary cross-entropy term measuring how well the
-           full model (encoder, predictor, decoder) can predict future images at
-           timesteps 2 to t given the sequence up to timestep t-1. Note that
-           predictions for timestep 1 are discarded.
-
-        3. KL divergence (pre-prediction): The Kullback-Leibler divergence between
-           the encoded latent distributions and a standard normal distribution.
-           This regularization term, used in variational autoencoders, encourages
-           the latent space to be well-structured and the learned features to be
-           robust and meaningful.
-
-        4. KL divergence (post-prediction): The Kullback-Leibler divergence between
-           the predicted latent distributions (for timesteps 2 to t) and a standard
-           normal distribution. This similarly regularizes the predicted latent codes
-           to maintain the same distributional properties as the encoded ones.
-
-        See Francois Chollet's "Deep Learning with Python", section 8.4, or
-        Bishop & Bishop's "Deep Learning: Foundations and Concepts", chapter 19,
-        for more details on the role of KL divergence in variational autoencoders.
-
-        Arguments
-        img_sequence    The full input image sequence with shape
-                        `(batch_size, seq_len, width, height, channels)`.
-        img_tilde       Reconstructed images from timesteps 0 to t-1, obtained by
-                        encoding and then decoding the input images.
-        img_hat         Predicted images for timesteps 1 to t, obtained by encoding
-                        the input sequence, using the predictor to forecast future
-                        latent codes, and decoding those predictions.
-        z_means         Mean of the multivariate Gaussian over the latent space
-                        obtained by encoding timesteps 0 to t-1.
-        z_log_vars      Logarithm of the variance of the multivariate Gaussian
-                        over the latent space obtained by encoding timesteps 0 to t-1.
-        z_means_hat     Mean of the multivariate Gaussian over the latent space
-                        predicted for timesteps 1 to t.
-        z_log_vars_hat  Logarithm of the variance of the multivariate Gaussian
-                        over the latent space predicted for timesteps 1 to t.
-
-        This method does not return anything, instead it leverages the built-in
-        `add_loss` method of `Model`.
-        """
-        # Reconstruction loss
-        img_for_recon = img_sequence[:, :-1, :, :, :]
-        img_for_recon_flat = tf.reshape(img_for_recon, (tf.shape(img_for_recon)[0], -1))
-        img_tilde_flat = tf.reshape(img_tilde, (tf.shape(img_tilde)[0], -1))
-        reconstruction_loss = tf.reduce_mean(
-            binary_crossentropy(img_for_recon_flat, img_tilde_flat)
-        )
-
-        # Prediction loss - use only predictions for timesteps 2 to t
-        img_for_pred = img_sequence[:, 2:, :, :, :]
-        img_hat_for_pred = img_hat[:, 1:, :, :, :]  # discard prediction at timestep 1
-        img_for_pred_flat = tf.reshape(img_for_pred, (tf.shape(img_for_pred)[0], -1))
-        img_hat_flat = tf.reshape(img_hat_for_pred, (tf.shape(img_hat_for_pred)[0], -1))
-        prediction_loss = tf.reduce_mean(
-            binary_crossentropy(img_for_pred_flat, img_hat_flat)
-        )
-
-        # KL divergence for encoded latent codes
-        kl_pre = -self.kl_regularization_parameter * tf.reduce_mean(
-            tf.reduce_mean(
-                1 + z_log_vars - tf.square(z_means) - tf.exp(z_log_vars), axis=-1
+            # Prediction error
+            img_for_pred = img_sequence[:, 2:, :, :, :]
+            img_for_pred_flat = K.flatten(img_for_pred)
+            img_hat_flat = K.flatten(img_hat)
+            prediction_loss = K.mean(
+                binary_crossentropy(img_for_pred_flat, img_hat_flat)
             )
-        )
 
-        # KL divergence for predicted latent codes (timesteps 2 to t only)
-        kl_post = -self.kl_regularization_parameter * tf.reduce_mean(
-            tf.reduce_mean(
-                1
-                + z_log_vars_hat[:, 1:]
-                - tf.square(z_means_hat[:, 1:])
-                - tf.exp(z_log_vars_hat[:, 1:]),
-                axis=-1,
+            # KL divergences
+            kl_pre = -5e-5 * K.mean(
+                K.mean(1 + z_log_vars - K.square(z_means) - K.exp(z_log_vars), axis=-1)
             )
-        )
-
-        total_loss = reconstruction_loss + prediction_loss + kl_pre + kl_post
-        self.add_loss(total_loss)
-
-    def predict_future(
-        self, initial_sequence, num_future_steps
-    ):  # pylint: disable=too-many-locals
-        """
-        Given an initial sequence of images, uses the full model (encoder, predictor,
-        and decoder) to autoregressively predict future images.
-
-        This function first encodes the initial sequence to obtain latent embeddings,
-        then uses these to initialize and warm up the LSTM state of the predictor by
-        feeding the entire initial sequence through it. After warming up, it generates
-        future predictions autoregressively: at each step, the predictor forecasts the
-        next latent code, which is sampled and decoded into an image, and this predicted
-        latent code is then used as input for the next prediction step.
-
-        Arguments
-        initial_sequence    Array with shape `(batch_size, t, width, height, channels)`
-                            containing the initial sequence of images. The model will
-                            use this sequence to initialize its internal state before
-                            generating predictions.
-        num_future_steps    Number of future timesteps to predict beyond the initial
-                            sequence.
-
-        Returns
-        Array with shape `(batch_size, num_future_steps, width, height, channels)`
-        containing the predicted future images.
-        """
-        batch_size = tf.shape(initial_sequence)[0]
-        latent_dim = self.latent_dim
-
-        # Encode initial sequence
-        z_mean, z_log_var = self.encode_sequence(initial_sequence)
-        seq_len = tf.shape(z_mean)[1]
-
-        # Initialize LSTM state
-        h_state = tf.zeros((batch_size, 12 * latent_dim), dtype=tf.float32)
-        c_state = tf.zeros((batch_size, 12 * latent_dim), dtype=tf.float32)
-
-        # Warm up LSTM state with the entire initial sequence
-        # At each step t, we feed timestep t and get a prediction for t+1
-        for t in range(seq_len):
-            current_input = tf.concat([z_mean[:, t], z_log_var[:, t]], axis=-1)
-            current_input = tf.expand_dims(current_input, 1)
-            rnn_output, h_state, c_state = self.predictor.lstm_cell(
-                current_input, initial_state=[h_state, c_state], training=False
+            kl_post = -5e-5 * K.mean(
+                K.mean(
+                    1 + z_log_vars_hat - K.square(z_means_hat) - K.exp(z_log_vars_hat),
+                    axis=-1,
+                )
             )
-            pred = self.predictor.output_layer(rnn_output)
 
-        # After the loop, pred is the prediction for timestep
-        # seq_len (first future timestep)
-        # Decode it as the first future prediction
-        pred_mean = pred[:, :latent_dim]
-        pred_log_var = pred[:, latent_dim:]
-        z_sample = self._sample(pred_mean, pred_log_var)
-        img = self.decoder(z_sample)
+            total_loss = reconstruction_loss + prediction_loss + kl_pre + kl_post
+            self.add_loss(total_loss)
+            return img_sequence[:, 0:1, :, :, :]
 
-        future_predictions = [img]
-        current_input = tf.expand_dims(pred, 1)
+    # Encoder (images to latent space)
+    input_img = layers.Input(shape=img_shape)
+    x = layers.Conv2D(filters=32, kernel_size=3, padding="same", activation="relu")(
+        input_img
+    )
+    x = layers.Conv2D(
+        filters=64, kernel_size=3, padding="same", activation="relu", strides=(2, 2)
+    )(x)
+    x = layers.Conv2D(filters=64, kernel_size=3, padding="same", activation="relu")(x)
+    x = layers.Conv2D(filters=64, kernel_size=3, padding="same", activation="relu")(x)
+    shape_before_flattening = K.int_shape(x)
+    x = layers.Flatten()(x)
+    x = layers.Dense(units=32, activation="relu")(x)
+    z_mean = layers.Dense(units=latent_dim)(x)
+    z_log_var = layers.Dense(units=latent_dim)(x)
+    encoder = Model(input_img, [z_mean, z_log_var])
 
-        # Generate remaining future predictions
-        for _ in range(num_future_steps - 1):
-            rnn_output, h_state, c_state = self.predictor.lstm_cell(
-                current_input, initial_state=[h_state, c_state], training=False
-            )
-            pred = self.predictor.output_layer(rnn_output)
+    # Latent space sampling
+    def sampling(args):
+        z_mean, z_log_var = args
+        shape = K.shape(z_mean)
+        epsilon = K.random_normal(shape=shape, mean=0.0, stddev=1.0)
+        return z_mean + K.exp(z_log_var) * epsilon
 
-            pred_mean = pred[:, :latent_dim]
-            pred_log_var = pred[:, latent_dim:]
-            z_sample = self._sample(pred_mean, pred_log_var)
-            img = self.decoder(z_sample)
-            future_predictions.append(img)
+    # Decoder (latent space to images)
+    decoder_input = layers.Input(shape=(latent_dim,))
+    x = layers.Dense(np.prod(shape_before_flattening[1:]), activation="relu")(
+        decoder_input
+    )
+    x = layers.Reshape(shape_before_flattening[1:])(x)
+    x = layers.Conv2DTranspose(
+        filters=32, kernel_size=3, padding="same", activation="relu", strides=(2, 2)
+    )(x)
+    x = layers.Conv2DTranspose(
+        filters=1, kernel_size=3, padding="same", activation="sigmoid"
+    )(x)
+    decoder = Model(decoder_input, x)
 
-            current_input = tf.expand_dims(pred, 1)
+    # Build the full model with variable-length image sequences
+    img_sequence = layers.Input(shape=(None,) + img_shape)
 
-        return tf.stack(future_predictions, axis=1)
+    # Encode images at timesteps 0 to t-1
+    img_for_encoding = layers.Lambda(lambda x: x[:, :-1, :, :, :])(img_sequence)
+
+    def encode_sequence(img_seq):
+        batch_size = K.shape(img_seq)[0]
+        seq_len = K.shape(img_seq)[1]
+        img_reshaped = K.reshape(img_seq, (-1,) + img_shape)
+        z_mean_flat, z_log_var_flat = encoder(img_reshaped)
+        z_mean_seq = K.reshape(z_mean_flat, (batch_size, seq_len, latent_dim))
+        z_log_var_seq = K.reshape(z_log_var_flat, (batch_size, seq_len, latent_dim))
+        return z_mean_seq, z_log_var_seq
+
+    z_means, z_log_vars = layers.Lambda(encode_sequence)(img_for_encoding)
+
+    scheduled_predictor = ScheduledSamplingPredictor(name="scheduled_predictor")
+    predictor_output = scheduled_predictor([z_means, z_log_vars])
+
+    z_means_hat = layers.Lambda(lambda x: x[:, :, :latent_dim])(predictor_output)
+    z_log_vars_hat = layers.Lambda(lambda x: x[:, :, latent_dim:])(predictor_output)
+
+    # Sample from encoded latent distributions
+    z_samples_encoded = layers.Lambda(sampling)([z_means, z_log_vars])
+
+    def decode_sequence(z_seq):
+        batch_size = K.shape(z_seq)[0]
+        seq_len = K.shape(z_seq)[1]
+        z_flat = K.reshape(z_seq, (-1, latent_dim))
+        x_flat = decoder(z_flat)
+        x_seq = K.reshape(x_flat, (batch_size, seq_len) + img_shape)
+        return x_seq
+
+    img_tilde = layers.Lambda(decode_sequence)(z_samples_encoded)
+
+    # Sample from predicted latent distributions
+    z_samples_predicted = layers.Lambda(sampling)([z_means_hat, z_log_vars_hat])
+    img_hat = layers.Lambda(decode_sequence)(z_samples_predicted)
+
+    y = CustomVariationalLayer()(
+        [
+            img_sequence,
+            img_tilde,
+            img_hat,
+            z_means,
+            z_log_vars,
+            z_means_hat,
+            z_log_vars_hat,
+        ]
+    )
+
+    # Compile the VAE model
+    vae = Model(img_sequence, y)
+    return vae
 
 
 class ScheduledSamplingCallback(Callback):
     """
-    Callback that gradually reduces the teacher forcing ratio during training.
+    Gradually reduces teacher forcing ratio during training.
 
-    This callback implements a curriculum learning schedule for the scheduled
-    sampling predictor. It starts with a high teacher forcing ratio (typically 1.0,
-    meaning the model always receives ground truth inputs during training) and
-    gradually decays this ratio over the course of training according to a specified
-    schedule.
-
-    The decay follows a multiplicative schedule: every `decay_every` epochs, the
-    current ratio is multiplied by `decay_rate`, until it reaches `min_ratio`.
-    This gradual transition helps the model learn robust predictions by slowly
-    exposing it to its own errors rather than experiencing an abrupt shift from
-    perfect inputs to imperfect ones.
-
-    Arguments
-    initial_ratio       Starting teacher forcing ratio. A value of 1.0 means
-                        the model always uses ground truth during training.
-                        Default is 1.0.
-    decay_rate          Multiplicative decay factor applied to the ratio.
-                        For example, 0.95 means the ratio is reduced by 5%
-                        each time it decays. Default is 0.95.
-    decay_every         Number of epochs between each decay step. Default is 5.
-    min_ratio           Minimum ratio to maintain. The ratio will never decay
-                        below this value. A value of 0.0 means eventually the
-                        model will use only its own predictions. Default is 0.0.
+    Args:
+        initial_ratio: Starting ratio (1.0 = always use ground truth)
+        decay_rate: Multiplicative decay factor (e.g., 0.95)
+        decay_every: Decay every N epochs
+        min_ratio: Minimum ratio to maintain (default 0.0)
     """
 
-    def __init__(
-        self, initial_ratio=1.0, decay_rate=0.95, decay_every=5, min_ratio=0.0
+    def __init__(  # pylint: disable=too-many-arguments
+        self,
+        predictor,
+        initial_ratio=1.0,
+        decay_rate=0.95,
+        decay_every=5,
+        min_ratio=0.0,
     ):
         super().__init__()
+        self.predictor = predictor
         self.initial_ratio = initial_ratio
         self.decay_rate = decay_rate
         self.decay_every = decay_every
         self.min_ratio = min_ratio
 
-    def on_train_begin(self, logs=None):  # pylint:disable=arguments-differ
-        """
-        Initialize the teacher forcing ratio at the start of training.
-
-        This method is called automatically by Keras when training begins. It sets
-        the predictor's teacher forcing ratio to the initial value specified when
-        the callback was created.
-
-        Argument
-        logs        Dictionary containing training metrics (unused in this method).
-        """
-        self.model.predictor.teacher_forcing_ratio.assign(self.initial_ratio)
+    def on_train_begin(
+        self, logs=None
+    ):  # pylint:disable=unused-argument, disable=missing-function-docstring
+        # Ensure we start at initial ratio
+        self.predictor.teacher_forcing_ratio.assign(self.initial_ratio)
         print(f"\nStarting with teacher forcing ratio: {self.initial_ratio:.4f}")
 
-    def on_epoch_end(self, epoch, logs=None):  # pylint:disable=arguments-differ
-        """
-        Decay the teacher forcing ratio at the end of specified epochs.
-
-        This method is called automatically by Keras at the end of each epoch. If
-        the current epoch number is a multiple of `decay_every`, it multiplies the
-        current teacher forcing ratio by `decay_rate`, ensuring it does not fall
-        below `min_ratio`.
-
-        Arguments
-        epoch       Zero-indexed epoch number (e.g., epoch 0 is the first epoch).
-        logs        Dictionary containing training metrics (unused in this method).
-        """
+    def on_epoch_end(
+        self, epoch, logs=None
+    ):  # pylint:disable=unused-argument, disable=missing-function-docstring
         if (epoch + 1) % self.decay_every == 0:
-            current_ratio = self.model.predictor.teacher_forcing_ratio.numpy()
+            current_ratio = self.predictor.teacher_forcing_ratio.numpy()
             new_ratio = max(self.min_ratio, current_ratio * self.decay_rate)
-            self.model.predictor.teacher_forcing_ratio.assign(new_ratio)
+            self.predictor.teacher_forcing_ratio.assign(new_ratio)
             print(f"\nEpoch {epoch+1}: Teacher forcing ratio = {new_ratio:.4f}")
