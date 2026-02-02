@@ -4,6 +4,8 @@ from importlib import resources
 
 import numpy as np
 
+from .. import models
+
 
 def load_data(kind: str = "demo") -> tuple:
     """
@@ -61,3 +63,42 @@ def load_data(kind: str = "demo") -> tuple:
     images = load(kind + "_images.npy")
 
     return snapshot_timesteps, positions, velocities, images
+
+
+def load_model(name: str = None) -> "keras.Model":
+    """
+    Load one of the demonstration models.
+
+    The models that may be loaded are the following.
+    name
+    memoryless_full         Model mapping two images in the immediate past to
+                            the next image in the immediate future. This model
+                            is primarily used because its training is used
+                            to pre-train the encoder-decoder pair.
+    memoryless_encoder      The encoder model which is part of the memoryless
+                            model above.
+    memoryless_decoder      The decoder model which is part of the memoryless
+                            model above.
+
+    Argument
+    name    String describing the model to load.
+
+    Returns
+    model   `keras.Model` object describing the model loaded.
+    """
+
+    path = resources.files("pythia").joinpath("demo/models/" + name + ".weights.h5")
+
+    if name == "memoryless_full":
+        model = models.Memoryless()
+        model.load_weights(path)
+    elif name == "memoryless_encoder":
+        model = models.Memoryless()
+        model = model.encoder
+        model.load_weights(path)
+    elif name == "memoryless_decoder":
+        model = models.Memoryless()
+        model = model.encoder
+        model.load_weights()
+
+    return model
