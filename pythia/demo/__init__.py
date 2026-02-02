@@ -91,6 +91,7 @@ def load_model(name: str = None) -> "keras.Model":
 
     if name == "memoryless_full":
         model = models.Memoryless()
+        model.build()
         model.load_weights(path)
     elif name == "memoryless_encoder":
         model = models.Memoryless()
