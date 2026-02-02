@@ -658,7 +658,7 @@ def build_model(  # pylint:disable=missing-function-docstring, too-many-locals, 
 
     # Compile the VAE model
     vae = Model(img_sequence, y)
-    return vae
+    return vae, encoder, scheduled_predictor, decoder
 
 
 class ScheduledSamplingCallback(Callback):
