@@ -318,6 +318,8 @@ def prediction(  # pylint: disable=missing-function-docstring, too-many-argument
             "the number of timesteps in ground_truth_images"
         )
 
+    # Add walls
+
     # Create plots
     figure, axes = plt.subplots(3, n_timesteps, figsize=(2 * n_timesteps, 5))
     for timestep_index in range(n_timesteps):
@@ -348,6 +350,117 @@ def prediction(  # pylint: disable=missing-function-docstring, too-many-argument
 
     plt.show()
     plt.close()
+
+
+def animated_prediction(  # pylint: disable=too-many-arguments, too-many-locals, missing-function-docstring
+    ground_truth_images,
+    predicted_image,
+    n_past_steps,
+    n_future_steps,
+    pause_duration: int = 2_000,  # In milliseconds
+    frame_interval: int = 250,  # Also in milliseconds
+):
+
+    n_timesteps, width, height, _ = ground_truth_images.shape
+    if n_past_steps + n_future_steps != n_timesteps:
+        raise ValueError(
+            "The total number of timesteps in `ground_truth_images` "
+            "must be equal to n_past_steps + n_future_steps"
+        )
+
+    n_pause_frames = pause_duration // frame_interval
+    img_shape = ground_truth_images.shape[1:]
+
+    # Images in the past
+    frames = [
+        np.concatenate(
+            [
+                ground_truth_images[snapshot_index],
+                np.ones(shape=img_shape),
+                np.ones(shape=img_shape),
+            ],
+            axis=-1,
+        )
+        for snapshot_index in range(n_past_steps)
+    ]
+
+    # First pause (when the prediction is displayed)
+    first_pause_frame = np.concatenate(
+        [
+            ground_truth_images[n_past_steps - 1],
+            predicted_image,
+            np.ones(shape=img_shape),
+        ],
+        axis=-1,
+    )
+    frames.extend([first_pause_frame for _ in range(n_pause_frames)])
+
+    # Images in the future, with the prediction displayed
+    frames.extend(
+        [
+            np.concatenate(
+                [
+                    ground_truth_images[snapshot_index],
+                    predicted_image,
+                    np.ones(shape=img_shape),
+                ],
+                axis=-1,
+            )
+            for snapshot_index in range(n_past_steps, n_timesteps)
+        ]
+    )
+
+    # Second pause (when the prediction is overlaid with what it predicts)
+    second_pause_frame = np.concatenate(
+        [
+            ground_truth_images[-1],
+            predicted_image,
+            np.ones(shape=img_shape),
+        ],
+        axis=-1,
+    )
+    frames.extend([second_pause_frame for _ in range(n_pause_frames)])
+
+    # Add the walls
+
+    # Initialize the animation
+    figure, axes = plt.subplots(figsize=(4, 4))
+    frame = axes.imshow(frames[0])
+    axes.set(xlim=(0, width + 1), ylim=height + 1)
+    axes.axis("off")
+    text = axes.text(
+        (width + 1) / 2,
+        height + 1.5,
+        "",
+        ha="center",
+        va="bottom",
+        fontsize=20,
+    )
+
+    # Define the animation loop
+    def update(frame_index):
+        frame.set_array(frames[frame_index])
+
+        # Update the text
+        if frame_index < n_past_steps:
+            text.set_text("Observe and gather data")
+        elif frame_index < n_past_steps + n_pause_frames:
+            text.set_text("Make a prediction")
+        else:
+            text.set_text("How did the prediction do?")
+
+        return [frame]
+
+    animation = FuncAnimation(
+        figure,
+        update,
+        frames=len(frames),
+        interval=frame_interval,
+        blit=True,
+        repeat=True,
+    )
+    plt.close()
+    return animation
 
 
 def _add_walls(input_image: np.ndarray, wall_location=4) -> np.ndarray:
