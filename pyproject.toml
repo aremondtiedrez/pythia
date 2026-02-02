@@ -26,4 +26,5 @@ include = ["pythia*"]
 [tool.setuptools.package-data]
 pythia = [
     "demo/data/*.npy",
+    "demo/models/*.weights.h5",
 ]
