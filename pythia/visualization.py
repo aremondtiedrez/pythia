@@ -316,7 +316,7 @@ def prediction(  # pylint: disable=missing-function-docstring, too-many-argument
     n_future_steps,
 ):
 
-    n_timesteps = ground_truth_images.shape[1]
+    n_timesteps = ground_truth_images.shape[0]
     if n_timesteps != n_past_steps + n_future_steps:
         raise ValueError(
             "n_past_steps and n_future_steps must add up to "
@@ -327,7 +327,12 @@ def prediction(  # pylint: disable=missing-function-docstring, too-many-argument
     images_in_past = ground_truth_images[:n_past_steps]
     predicted_images = np.array(
         models.predict_future(
-            encoder, predictor, decoder, latent_dim, images_in_past, n_future_steps
+            encoder,
+            predictor,
+            decoder,
+            latent_dim,
+            np.expand_dims(images_in_past, axis=0),
+            n_future_steps,
         )
     )[0]
 
