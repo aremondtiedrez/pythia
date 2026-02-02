@@ -932,18 +932,21 @@ class LEMON(Model):  # pylint: disable=abstract-method, too-many-ancestors
         h_state = tf.zeros((batch_size, 12 * latent_dim), dtype=tf.float32)
         c_state = tf.zeros((batch_size, 12 * latent_dim), dtype=tf.float32)
 
-        # Warm up LSTM state
+        # Warm up LSTM state AND get first prediction
+        current_input = None
         for t in range(seq_len):
             current_input = tf.concat([z_mean[:, t], z_log_var[:, t]], axis=-1)
             current_input = tf.expand_dims(current_input, 1)
-            _, h_state, c_state = self.predictor.lstm_cell(
+            rnn_output, h_state, c_state = self.predictor.lstm_cell(
                 current_input, initial_state=[h_state, c_state], training=False
             )
 
+        # Get the first prediction from the warmed-up state
+        pred = self.predictor.output_layer(rnn_output)
+
         # Generate future predictions autoregressively
         future_predictions = []
-        current_input = tf.concat([z_mean[:, -1], z_log_var[:, -1]], axis=-1)
-        current_input = tf.expand_dims(current_input, 1)
+        current_input = tf.expand_dims(pred, 1)
 
         for _ in range(num_future_steps):
             # Predict next latent parameters
@@ -963,7 +966,7 @@ class LEMON(Model):  # pylint: disable=abstract-method, too-many-ancestors
             img = self.decoder(z_sample)
             future_predictions.append(img)
 
-            # Use prediction as next input (THIS IS THE KEY FIX)
+            # Use prediction as next input
             current_input = tf.expand_dims(pred, 1)
 
         # Stack predictions
