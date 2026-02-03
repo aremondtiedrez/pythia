@@ -15,7 +15,10 @@ of images depicting a round ball bouncing around a closed box.
 
 ![Training sample](https://github.com/aremondtiedrez/pythia/blob/main/pythia/demo/sample_gifs/training_sample_1.gif)
 
-A trained PyThia model is then capable of predicting the future trajectory:
+A trained PyThia model is then capable of predicting the future trajectory.
+The animation below shows the first half of a video, from which the model
+predicts the last frame of the video, and then compares the model's prediction
+with the truth.
 
 ![Prediction](https://github.com/aremondtiedrez/pythia/blob/main/pythia/demo/sample_gifs/prediction_1.gif)
 
