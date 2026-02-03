@@ -10,6 +10,7 @@ It is available as an [interactive notebook](
     https://colab.research.google.com/github/aremondtiedrez/pythia/blob/main/demo.ipynb
 ) served via Google Colab.
 
+<!--
 As you will see in that notebook, the PyThia models are trained on sequences
 of images depicting a round ball bouncing around a closed box.
 
@@ -21,6 +22,7 @@ predicts the last frame of the video, and then compares the model's prediction
 with the truth.
 
 ![Prediction](https://github.com/aremondtiedrez/pythia/blob/main/pythia/demo/sample_gifs/prediction_1.gif)
+-->
 
 ## Why the name `PyThia`?
 The objective of this project is to predict what will happen in the future,
